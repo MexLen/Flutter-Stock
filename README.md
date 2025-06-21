@@ -1,16 +1,9 @@
-# flutter_stock
-
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. 添加基金
+2. 展示基金净值图，分天月年
+7. 展示回撤
+9. 回撤定投策略
+10. 回撤分析
+11. 基金买入 ？ 
+12. 基金卖出 ？
+13. 展示基金持仓
+14. 展示基金累计收益
