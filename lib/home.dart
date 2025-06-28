@@ -16,12 +16,12 @@ class _FundHomeState extends State<FundHome> {
     return Container(
       color: Colors.white70,
       child: Column(
-        children: [FundHeader(), Divider(), Expanded(child: FundList(fund_codes: ['016573','017489','015290','007466','018561','005970']))],
+        children: [FundHeader(), Divider(), Expanded(child: FundList(fund_codes: ['019260','016573','017489','015290','018413','016343','007466','004317','018561','017867','014402','011555']))]
       ),
     );
   }
 }
-var lst = ['016573','017489','015290','007466','018561'];
+
 
 class FundList extends StatefulWidget {
   

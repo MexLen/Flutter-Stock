@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'fetch.dart';
+import 'dca_buy.dart';
 
 class FundHeader extends StatelessWidget {
   @override
@@ -12,10 +15,10 @@ class FundHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
         children: [
-          SizedBox(width: 100, child: Text('名称')),
-          SizedBox(width: 100, child: Text('涨跌')),
-          SizedBox(width: 100, child: Text('净值')),
-          SizedBox(width: 100, child: Text('回撤')),
+          SizedBox(width: 100, child: Text('基金名称')),
+          SizedBox(width: 100, child: Text('涨跌幅度')),
+          SizedBox(width: 100, child: Text('累计净值')),
+          SizedBox(width: 100, child: Text('最近回撤')),
         ],
       ),
     );
@@ -27,10 +30,15 @@ class FundDetail extends StatelessWidget {
   const FundDetail({super.key, required this.fund});
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return Column(
       children: [
-        FundLineChart(history: fund.history, title: this.fund.name),
-        FundInfoHeader(fund: fund),
+        Stack(
+          children: [
+            FundLineChart(history: fund.history, title: this.fund.name),
+            FundInfoHeader(fund: fund),
+          ],
+        ),
+        // Expanded(child: SimulatedDCAPageWithControl(history: fund.history)),
       ],
     );
   }
@@ -80,8 +88,8 @@ class FundItem extends StatelessWidget {
           SizedBox(
             width: 100,
             child: Text(
-              '-${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%',
-              style: TextStyle(color: Colors.green, fontSize: 12),
+             fund.backdraw_list.last>0?  '-${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%':'${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%',
+              style: TextStyle(color: fund.backdraw_list.last > 0 ? Colors.green : Colors.red, fontSize: 12),
             ),
           ),
         ],
@@ -89,3 +97,4 @@ class FundItem extends StatelessWidget {
     );
   }
 }
+

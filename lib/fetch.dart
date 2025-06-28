@@ -36,6 +36,7 @@ class Fund {
 
 
 
+
 /// 折线图版本的 FundChart（LineChart 已经是折线图）
 /// 如果你想要更明显的折线效果（非平滑曲线），只需将 isCurved: false
 
@@ -59,10 +60,10 @@ class FundLineChart extends StatelessWidget {
       for (int i = 0; i < data.length; i++)
         FlSpot(i.toDouble(), double.tryParse(data[i]['DWJZ'] ?? '0') ?? 0)
     ];
-    return Card(
-      margin: const EdgeInsets.all(12),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+
+      // elevation: 4,
+
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -129,10 +130,10 @@ class FundLineChart extends StatelessWidget {
                       strokeWidth: 1,
                     ),
                   ),
-                  borderData: FlBorderData(
-                    show: true,
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
+                  // borderData: FlBorderData(
+                  //   show: true,
+                  //   border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  // ),
                   minY: spots.map((e) => e.y).reduce((a, b) => a < b ? a : b) * 0.98,
                   maxY: spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.02,
                 ),
@@ -238,7 +239,7 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
     // 运行在 Web
     host = 'http://localhost:8080/api';
   } else if (Platform.isAndroid) {
-    host = 'https://fundgz.1234567.com.cn';
+    host = 'https://api.fund.eastmoney.com';
   }  else {
     host = 'http://localhost:8080/api';
   }
@@ -253,6 +254,7 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
     },
   );
+  final body = utf8.decode(response.bodyBytes);
   if (response.statusCode == 200) {
     final body = utf8.decode(response.bodyBytes);
     final jsonMap = json.decode(body);
@@ -285,100 +287,4 @@ bool buyStrategy(List<dynamic> draw_list, int idx, {double downrate = 0.1}) {
   return false;
 }
 
-/// 按自定义策略模拟加仓，计算收益
-/// [history] 历史净值数据（按时间倒序，最近在前）
-/// [buyStrategy] 自定义加仓策略，返回true表示当天加仓
-/// [initAmount] 初始投入金额
-/// [buyAmount] 每次加仓金额
-Map<String, dynamic> simulateBuyStrategy(
-  List<Map<String, dynamic>> history, {
-  required bool Function(List<dynamic> draw_list, int idx, {double downrate})
-  buyStrategy,
-  double initAmount = 1000.0,
-  double buyAmount = 1000.0,
-  double rate = 0.1,
-}) {
-  if (history.isEmpty) return {};
-  var draw_list = calculateMaxDrawdown(history);
-  double totalShares = 0.0;
-  double totalInvested = 0.0;
-  List<Map<String, dynamic>> actions = [];
-  // 初始投入
-  var first = history.first;
-  double firstNetValue = double.tryParse(first['DWJZ']) ?? 0.0;
-  if (firstNetValue > 0) {
-    totalShares += initAmount / firstNetValue;
-    totalInvested += initAmount;
-    actions.add({
-      'date': first['FSRQ'],
-      'action': 'init',
-      'amount': initAmount,
-      'netValue': firstNetValue,
-      'shares': totalShares,
-      'totalInvested': totalInvested,
-    });
-  }
 
-  for (int i = 1; i < history.length; i++) {
-    var day = history[i];
-    double netValue = double.tryParse(day['DWJZ']) ?? 0.0;
-    if (netValue <= 0) continue;
-    if (buyStrategy(draw_list, i, downrate: rate)) {
-      totalShares += buyAmount / netValue;
-      totalInvested += buyAmount;
-      actions.add({
-        'date': day['FSRQ'],
-        'action': 'buy',
-        'amount': buyAmount,
-        'netValue': netValue,
-        'shares': totalShares,
-        'totalInvested': totalInvested,
-      });
-    }
-  }
-
-  // 计算当前市值和收益
-  var last = history.last;
-  double lastNetValue = double.tryParse(last['DWJZ']) ?? 0.0;
-  double currentValue = totalShares * lastNetValue;
-  double profit = currentValue - totalInvested;
-  double profitRate = totalInvested > 0 ? profit / totalInvested : 0.0;
-
-  return {
-    'totalInvested': totalInvested,
-    'currentValue': currentValue,
-    'profit': profit,
-    'profitRate': profitRate,
-    'totalShares': totalShares,
-    'lastNetValue': lastNetValue,
-    'actions': actions,
-  };
-}
-
-// void main() async {
-//   List<String> codes = ['016573'];
-//   for (var code in codes) {
-//     var info = await findFund(code);
-
-//     var history = await fetchFundHistory(code, perPage: 30);
-//     var drawList = calculateMaxDrawdown(history);
-
-//     var gain = simulateBuyStrategy(
-//       history,
-//       initAmount: 5000.0,
-//       buyAmount: 500,
-//       buyStrategy: buyStrategy,
-//       rate: 0.005,
-//     );
-//     double rate = gain['profitRate'];
-//     print('>>>>>>>>>>>>>>>>>>>>>>>>>>');
-//     print(info.name);
-//     print("最近回撤 ${drawList.last}");
-//     print('总投入 ${gain['totalInvested']}');
-//     print('当前 ${gain['currentValue']}');
-//     print('收益 ${gain['profit']}');
-//     print('收益率 ${(rate.toStringAsFixed(3))}');
-//     print('>>>>>>>>>>>>>>>>>>>>>>>>>>');
-//     print('');
-//   }
-// }
