@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:Fund/smart_buy.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'fetch.dart';
@@ -25,21 +26,57 @@ class FundHeader extends StatelessWidget {
   }
 }
 
-class FundDetail extends StatelessWidget {
-  final Fund fund;
-  const FundDetail({super.key, required this.fund});
+class FundDetailTabView extends StatefulWidget {
+  final List<Map<String, dynamic>> history;
+  const FundDetailTabView({super.key, required this.history});
+
+  @override
+  _FundDetailTabViewState createState() => _FundDetailTabViewState();
+}
+
+class _FundDetailTabViewState extends State<FundDetailTabView>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Stack(
+    return Expanded(
+      child: Material(
+        child: Column(
           children: [
-            FundLineChart(history: fund.history, title: this.fund.name),
-            FundInfoHeader(fund: fund),
+            Container(
+              color: Colors.grey[200],
+              child: TabBar(
+                controller: _tabController,
+                labelColor: Theme.of(context).primaryColor,
+                unselectedLabelColor: Colors.black54,
+                tabs: [Tab(text: '定投模拟'), Tab(text: '智能买入')],
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  SimulatedDCAPageWithControl(history: widget.history),
+                  SmartBuyPage(history: widget.history),
+                ],
+              ),
+            ),
           ],
         ),
-        // Expanded(child: SimulatedDCAPageWithControl(history: fund.history)),
-      ],
+      ),
     );
   }
 }
@@ -61,7 +98,9 @@ class FundItem extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => FundDetail(fund: this.fund),
+                    builder:
+                        (context) =>
+                            FundDetailTabView(history: this.fund.history),
                   ),
                 );
               },
@@ -88,8 +127,13 @@ class FundItem extends StatelessWidget {
           SizedBox(
             width: 100,
             child: Text(
-             fund.backdraw_list.last>0?  '-${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%':'${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%',
-              style: TextStyle(color: fund.backdraw_list.last > 0 ? Colors.green : Colors.red, fontSize: 12),
+              fund.backdraw_list.last > 0
+                  ? '-${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%'
+                  : '${(fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%',
+              style: TextStyle(
+                color: fund.backdraw_list.last > 0 ? Colors.green : Colors.red,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -97,4 +141,3 @@ class FundItem extends StatelessWidget {
     );
   }
 }
-

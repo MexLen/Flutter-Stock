@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'fetch.dart';
+
 /// 按自定义策略模拟加仓，计算收益
 /// [history] 历史净值数据（按时间倒序，最近在前）
 /// [buyStrategy] 自定义加仓策略，返回true表示当天加仓
@@ -71,10 +72,6 @@ Map<String, dynamic> simulateBuyStrategy(
   };
 }
 
-
-
-
-
 class SimulateChart extends StatelessWidget {
   final List<Map<String, dynamic>> history;
   final List<Map<String, dynamic>> actions;
@@ -94,7 +91,9 @@ class SimulateChart extends StatelessWidget {
     // 买点
     List<FlSpot> buySpots = [];
     for (var action in actions) {
-      if (action['action'] == 'buy' || action['action'] == 'init') {
+      if (action['action'] == 'buy' ||
+          action['action'] == 'init' ||
+          action['action'] == 'dca') {
         int idx = history.indexWhere((h) => h['FSRQ'] == action['date']);
         if (idx != -1) {
           double netValue = double.tryParse(history[idx]['DWJZ']) ?? 0.0;
@@ -139,6 +138,193 @@ class SimulateChart extends StatelessWidget {
         titlesData: FlTitlesData(show: false),
         gridData: FlGridData(show: false),
         borderData: FlBorderData(show: true),
+      ),
+    );
+  }
+}
+
+class SmartBuyPage extends StatefulWidget {
+  final List<Map<String, dynamic>> history;
+
+  const SmartBuyPage({Key? key, required this.history}) : super(key: key);
+
+  @override
+  State<SmartBuyPage> createState() => _SmartBuyPageState();
+}
+
+class _SmartBuyPageState extends State<SmartBuyPage> {
+  double initAmount = 1000.0;
+  double buyAmount = 1000.0;
+  double downRate = 0.01;
+  late Map<String, dynamic> result;
+
+  @override
+  void initState() {
+    super.initState();
+    _simulate();
+  }
+
+  void _simulate() {
+    // 示例策略：当最大回撤超过downRate时加仓
+    bool buyStrategy(List<dynamic> drawList, int idx, {double downrate = 0.1}) {
+      if (idx < 0 || idx >= drawList.length) return false;
+      var draw = drawList[idx];
+      if (draw > 0) {
+        return (draw as double) >= downrate;
+      }
+      return false;
+    }
+
+    result = simulateBuyStrategy(
+      widget.history,
+      buyStrategy: buyStrategy,
+      initAmount: initAmount,
+      buyAmount: buyAmount,
+      rate: downRate,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SmartBuyPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.history != widget.history) {
+      _simulate();
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  Widget _buildSlider({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+    String? unit,
+  }) {
+    return Row(
+      children: [
+        SizedBox(width: 80, child: Text(label)),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            label:
+                unit != null
+                    ? '${(value * 100).toStringAsFixed(1)}$unit'
+                    : value.toStringAsFixed(0),
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 60,
+          child: Text(
+            unit != null
+                ? '${(value * 100).toStringAsFixed(1)}$unit'
+                : value.toStringAsFixed(0),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    List<Map<String, dynamic>> actions = result['actions'] ?? [];
+    double profit = result['profit'] ?? 0.0;
+    double profitRate = result['profitRate'] ?? 0.0;
+    double totalInvested = result['totalInvested'] ?? 0.0;
+    double currentValue = result['currentValue'] ?? 0.0;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('智能定投模拟')),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            _buildSlider(
+              label: '回撤阈值',
+              value: downRate,
+              min: 0.001,
+              max: 0.1,
+              divisions: 100,
+              unit: '%',
+              onChanged: (v) {
+                setState(() {
+                  downRate = v;
+                  _simulate();
+                });
+              },
+            ),
+            Row(
+              children: [
+                Expanded(child: Text('初始投入: ${initAmount.toStringAsFixed(0)}')),
+                Expanded(child: Text('每次加仓: ${buyAmount.toStringAsFixed(0)}')),
+                Expanded(
+                  child: Text('回撤阈值: ${(downRate * 100).toStringAsFixed(1)}%'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('总投入: ${totalInvested.toStringAsFixed(2)}'),
+                ),
+                Expanded(
+                  child: Text('当前市值: ${currentValue.toStringAsFixed(2)}'),
+                ),
+                Expanded(
+                  child: Text(
+                    '收益: ${profit.toStringAsFixed(2)} (${(profitRate * 100).toStringAsFixed(2)}%)',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SimulateChart(history: widget.history, actions: actions),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 可选：美化页面，增加卡片、阴影、间距、字体等
+class SmartBuyPageStyled extends StatelessWidget {
+  final List<Map<String, dynamic>> history;
+
+  const SmartBuyPageStyled({Key? key, required this.history}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.grey[100],
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Card(
+            elevation: 6,
+            margin: const EdgeInsets.all(1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(1.0),
+              child: SmartBuyPage(history: history),
+            ),
+          ),
+        ),
       ),
     );
   }
