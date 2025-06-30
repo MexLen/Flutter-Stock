@@ -72,72 +72,175 @@ Map<String, dynamic> simulateBuyStrategy(
   };
 }
 
-class SimulateChart extends StatelessWidget {
-  final List<Map<String, dynamic>> history;
-  final List<Map<String, dynamic>> actions;
+class BuyPointTooltip extends StatelessWidget {
+  final String date;
+  final double netValue;
 
-  const SimulateChart({Key? key, required this.history, required this.actions})
+  const BuyPointTooltip({Key? key, required this.date, required this.netValue})
     : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // 净值线
+    return Card(
+      color: Colors.white,
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          '$date\n净值: ${netValue.toStringAsFixed(4)}',
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+        ),
+      ),
+    );
+  }
+}
+
+class SimulateChartWithTooltip extends StatefulWidget {
+  final List<Map<String, dynamic>> history;
+  final List<Map<String, dynamic>> actions;
+
+  const SimulateChartWithTooltip({
+    Key? key,
+    required this.history,
+    required this.actions,
+  }) : super(key: key);
+
+  @override
+  State<SimulateChartWithTooltip> createState() =>
+      _SimulateChartWithTooltipState();
+}
+
+class _SimulateChartWithTooltipState extends State<SimulateChartWithTooltip> {
+  FlSpot? selectedSpot;
+  String? selectedDate;
+  double? selectedNetValue;
+  Offset? tapPosition;
+
+  @override
+  Widget build(BuildContext context) {
     List<FlSpot> netValueSpots = [];
-    for (int i = 0; i < history.length; i++) {
-      double netValue = double.tryParse(history[i]['DWJZ']) ?? 0.0;
+    for (int i = 0; i < widget.history.length; i++) {
+      double netValue = double.tryParse(widget.history[i]['DWJZ']) ?? 0.0;
       netValueSpots.add(FlSpot(i.toDouble(), netValue));
     }
 
-    // 买点
     List<FlSpot> buySpots = [];
-    for (var action in actions) {
+    List<String> buyDates = [];
+    for (var action in widget.actions) {
       if (action['action'] == 'buy' ||
           action['action'] == 'init' ||
           action['action'] == 'dca') {
-        int idx = history.indexWhere((h) => h['FSRQ'] == action['date']);
+        int idx = widget.history.indexWhere((h) => h['FSRQ'] == action['date']);
         if (idx != -1) {
-          double netValue = double.tryParse(history[idx]['DWJZ']) ?? 0.0;
+          double netValue = double.tryParse(widget.history[idx]['DWJZ']) ?? 0.0;
           buySpots.add(FlSpot(idx.toDouble(), netValue));
+          buyDates.add(action['date']);
         }
       }
     }
 
-    return LineChart(
-      LineChartData(
-        minY:
-            netValueSpots.map((e) => e.y).reduce((a, b) => a < b ? a : b) *
-            0.98,
-        maxY:
-            netValueSpots.map((e) => e.y).reduce((a, b) => a > b ? a : b) *
-            1.02,
-        lineBarsData: [
-          LineChartBarData(
-            spots: netValueSpots,
-            isCurved: false,
-            color: Colors.blue,
-            barWidth: 2,
-            dotData: FlDotData(show: false),
-          ),
-          LineChartBarData(
-            spots: buySpots,
-            isCurved: false,
-            color: Colors.red,
-            barWidth: 0,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter:
-                  (spot, percent, bar, index) => FlDotCirclePainter(
-                    radius: 4,
-                    color: Colors.red,
-                    strokeWidth: 2,
-                    strokeColor: Colors.white,
+    return GestureDetector(
+      onTapUp: (details) {
+        final box = context.findRenderObject() as RenderBox;
+        final localPos = box.globalToLocal(details.globalPosition);
+
+        final chartWidth = box.size.width;
+        final chartHeight = box.size.height;
+
+        // Find the closest buy spot to the tap
+        double minDist = double.infinity;
+        int? minIdx;
+        for (int i = 0; i < buySpots.length; i++) {
+          final spot = buySpots[i];
+          // Map spot.x/y to pixel coordinates
+          double x = spot.x / (netValueSpots.length - 1) * chartWidth;
+          double minY =
+              netValueSpots.map((e) => e.y).reduce((a, b) => a < b ? a : b) *
+              0.98;
+          double maxY =
+              netValueSpots.map((e) => e.y).reduce((a, b) => a > b ? a : b) *
+              1.02;
+          double y =
+              chartHeight - ((spot.y - minY) / (maxY - minY) * chartHeight);
+
+          double dist = (localPos.dx - x).abs() + (localPos.dy - y).abs();
+          if (dist < minDist && dist < 30) {
+            minDist = dist;
+            minIdx = i;
+          }
+        }
+        if (minIdx != null) {
+          setState(() {
+            selectedSpot = buySpots[minIdx!];
+            selectedDate = buyDates[minIdx!];
+            selectedNetValue = buySpots[minIdx!].y;
+            tapPosition = details.globalPosition;
+          });
+        } else {
+          setState(() {
+            selectedSpot = null;
+            selectedDate = null;
+            selectedNetValue = null;
+            tapPosition = null;
+          });
+        }
+      },
+      child: Stack(
+        children: [
+          LineChart(
+            LineChartData(
+              minY:
+                  netValueSpots
+                      .map((e) => e.y)
+                      .reduce((a, b) => a < b ? a : b) *
+                  0.98,
+              maxY:
+                  netValueSpots
+                      .map((e) => e.y)
+                      .reduce((a, b) => a > b ? a : b) *
+                  1.02,
+              lineBarsData: [
+                LineChartBarData(
+                  spots: netValueSpots,
+                  isCurved: false,
+                  color: Colors.blue,
+                  barWidth: 2,
+                  dotData: FlDotData(show: false),
+                ),
+                LineChartBarData(
+                  spots: buySpots,
+                  isCurved: false,
+                  color: Colors.red,
+                  barWidth: 0,
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter:
+                        (spot, percent, bar, index) => FlDotCirclePainter(
+                          radius: 4,
+                          color: Colors.red,
+                          strokeWidth: 2,
+                          strokeColor: Colors.white,
+                        ),
                   ),
+                ),
+              ],
+              titlesData: FlTitlesData(show: false),
+              gridData: FlGridData(show: false),
+              borderData: FlBorderData(show: true),
             ),
           ),
+          if (selectedSpot != null &&
+              selectedDate != null &&
+              tapPosition != null)
+            Positioned(
+              left: 20,
+              top: 20,
+              child: BuyPointTooltip(
+                date: selectedDate!,
+                netValue: selectedNetValue!,
+              ),
+            ),
         ],
-        titlesData: FlTitlesData(show: false),
-        gridData: FlGridData(show: false),
-        borderData: FlBorderData(show: true),
       ),
     );
   }
@@ -169,6 +272,9 @@ class _SmartBuyPageState extends State<SmartBuyPage> {
     bool buyStrategy(List<dynamic> drawList, int idx, {double downrate = 0.1}) {
       if (idx < 0 || idx >= drawList.length) return false;
       var draw = drawList[idx];
+      if (drawList[idx] < drawList[idx - 1]) {
+        return false;
+      }
       if (draw > 0) {
         return (draw as double) >= downrate;
       }
@@ -291,7 +397,10 @@ class _SmartBuyPageState extends State<SmartBuyPage> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: SimulateChart(history: widget.history, actions: actions),
+              child: SimulateChartWithTooltip(
+                history: widget.history,
+                actions: actions,
+              ),
             ),
           ],
         ),
@@ -329,3 +438,6 @@ class SmartBuyPageStyled extends StatelessWidget {
     );
   }
 }
+
+
+//生成一个你认为最优的智能买入策略，类似上面的代码同样生成页面和显示买卖点

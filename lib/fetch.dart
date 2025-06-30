@@ -15,6 +15,7 @@ class Fund {
   String gztime; // "2025-06-23 14:36" 当前时间
   List<dynamic> backdraw_list=[];
   List<Map<String, dynamic>> history = [];
+  List<Map<String, dynamic>> history90 = [];
   Fund({
     required this.fundcode,
     required this.name,

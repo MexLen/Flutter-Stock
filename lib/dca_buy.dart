@@ -215,7 +215,7 @@ class _SimulatedDCAPageWithControlState
   @override
   void initState() {
     super.initState();
-    _period = DcaPeriodSetting.daily();
+    _period = DcaPeriodSetting.weekly(4);
     _result = simulateDCAWithPeriod(widget.history, period: _period);
   }
 
@@ -330,7 +330,7 @@ class _SimulatedDCAPageWithControlState
             if (_result['actions'] != null && _result['actions'].isNotEmpty)
               SizedBox(
                 height: 180,
-                child: SimulateChart(
+                child: SimulateChartWithTooltip(
                   history: widget.history,
                   actions: _result['actions'],
                 ),

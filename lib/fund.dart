@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'fetch.dart';
 import 'dca_buy.dart';
+import 'smart_eva.dart';
 
 class FundHeader extends StatelessWidget {
   @override
@@ -27,8 +28,8 @@ class FundHeader extends StatelessWidget {
 }
 
 class FundDetailTabView extends StatefulWidget {
-  final List<Map<String, dynamic>> history;
-  const FundDetailTabView({super.key, required this.history});
+  final Fund fund;
+  const FundDetailTabView({super.key, required this.fund});
 
   @override
   _FundDetailTabViewState createState() => _FundDetailTabViewState();
@@ -38,9 +39,38 @@ class _FundDetailTabViewState extends State<FundDetailTabView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  Future<void> loadHistory() async {
+    if (!widget.fund.history90.isEmpty) {
+      return;
+    }
+    var history1 = await fetchFundHistory(
+      widget.fund.fundcode,
+      page: 1,
+      perPage: 30,
+    );
+    var history2 = await fetchFundHistory(
+      widget.fund.fundcode,
+      page: 2,
+      perPage: 30,
+    );
+    var history3 = await fetchFundHistory(
+      widget.fund.fundcode,
+      page: 3,
+      perPage: 30,
+    );
+    setState(() {
+      if (widget.fund.history90.isEmpty) {
+        widget.fund.history90.addAll(history3);
+        widget.fund.history90.addAll(history2);
+        widget.fund.history90.addAll(history1);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    loadHistory();
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -69,8 +99,8 @@ class _FundDetailTabViewState extends State<FundDetailTabView>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  SimulatedDCAPageWithControl(history: widget.history),
-                  SmartBuyPage(history: widget.history),
+                  SimulatedDCAPageWithControl(history: widget.fund.history90),
+                  SmartBuyPage(history: widget.fund.history90),
                 ],
               ),
             ),
@@ -98,9 +128,7 @@ class FundItem extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) =>
-                            FundDetailTabView(history: this.fund.history),
+                    builder: (context) => FundDetailTabView(fund: this.fund),
                   ),
                 );
               },
