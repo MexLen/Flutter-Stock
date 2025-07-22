@@ -36,6 +36,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   fl_chart: ^1.0.0
   http: ^1.4.0
+  html: ^0.15.6
+  shared_preferences: ^2.5.3
+  path_provider: ^2.1.5
+  badges: ^3.1.2
+  sticky_headers: ^0.3.0+2
 
 dev_dependencies:
   flutter_test:

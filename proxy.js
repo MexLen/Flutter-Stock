@@ -18,6 +18,12 @@ app.use('/api', createProxyMiddleware({
   secure: false, // 关闭 SSL 校验，仅用于开发环境
   logLevel: 'debug',
 }));
+app.use('/find', createProxyMiddleware({
+  target: 'https://www.dayfund.cn',
+  changeOrigin: true,
+  secure: false, // 关闭 SSL 校验，仅用于开发环境
+  logLevel: 'debug',
+}));
 
 app.listen(8080, () => console.log('Proxy server listening on port 8080'));
 /*
