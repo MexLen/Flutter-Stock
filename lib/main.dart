@@ -38,12 +38,13 @@ class FundHomePage extends StatefulWidget {
   State<FundHomePage> createState() => _FundHomePageState();
 }
 
-class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderStateMixin {
+class _FundHomePageState extends State<FundHomePage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _dbHelper = FundDbHelper();
   // 使用回调函数替代 GlobalKey
   VoidCallback? _refreshMyFundList;
-  
+
   @override
   void initState() {
     super.initState();
@@ -67,7 +68,7 @@ class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderSt
     try {
       final prefs = await SharedPreferences.getInstance();
       List<String> myFundCodes = prefs.getStringList('my_fund_codes') ?? [];
-      
+
       // 检查是否已经添加过
       if (myFundCodes.contains(fund.fundcode)) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -76,7 +77,9 @@ class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderSt
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
         return;
@@ -99,12 +102,11 @@ class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderSt
 
       // 切换到我的基金页面
       _tabController.animateTo(0);
-      
+
       // 刷新我的基金列表
       if (_refreshMyFundList != null) {
         _refreshMyFundList!();
       }
-
     } catch (e) {
       print('添加基金失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,11 +137,11 @@ class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderSt
           indicatorWeight: 3,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-          tabs: const [
-            Tab(text: '我的基金'),
-            Tab(text: '基金搜索'),
-          ],
+          labelStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+          tabs: const [Tab(text: '我的基金'), Tab(text: '基金搜索')],
         ),
       ),
       body: TabBarView(
@@ -158,7 +160,7 @@ class _FundHomePageState extends State<FundHomePage> with SingleTickerProviderSt
 
 class FundSearchPage extends StatefulWidget {
   final Function(Fund) onFundAdded;
-  
+
   const FundSearchPage({super.key, required this.onFundAdded});
 
   @override
@@ -168,8 +170,19 @@ class FundSearchPage extends StatefulWidget {
 class _FundSearchPageState extends State<FundSearchPage> {
   final _controller = TextEditingController();
   final _dbHelper = FundDbHelper();
+  static final RegExp _fundCodeRegex = RegExp(r'^\d{6}$');
   List<Fund> _results = [];
   bool _loading = false;
+
+  static bool isFundCode(String input) {
+    if (input.isEmpty) return false;
+
+    // 移除空格
+    final cleanInput = input.trim();
+
+    // 检查是否为6位数字
+    return _fundCodeRegex.hasMatch(cleanInput);
+  }
 
   Future<void> _search(String keyword) async {
     if (keyword.isEmpty) {
@@ -180,7 +193,14 @@ class _FundSearchPageState extends State<FundSearchPage> {
     setState(() => _loading = true);
     try {
       final results = await _dbHelper.search(keyword);
-      setState(() => _results = results.map((map) => Fund.fromDbMap(map)).toList());
+      if (results.isEmpty && isFundCode(keyword)) {
+        var fund = await findFund(keyword);
+        setState(() => _results = [fund]);
+      } else {
+        setState(
+          () => _results = results.map((map) => Fund.fromDbMap(map)).toList(),
+        );
+      }
     } catch (e) {
       print('搜索错误: $e');
       setState(() => _results = []);
@@ -223,18 +243,26 @@ class _FundSearchPageState extends State<FundSearchPage> {
                 hintText: '输入基金代码或名称搜索...',
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
                 border: InputBorder.none,
-                prefixIcon: Icon(Icons.search, color: Colors.blue[400], size: 24),
-                suffixIcon: _controller.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, color: Colors.grey[400]),
-                        onPressed: () {
-                          _controller.clear();
-                          _search('');
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: Colors.blue[400],
+                  size: 24,
+                ),
+                suffixIcon:
+                    _controller.text.isNotEmpty
+                        ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.grey[400]),
+                          onPressed: () {
+                            _controller.clear();
+                            _search('');
+                            setState(() {});
+                          },
+                        )
+                        : null,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
               ),
               onChanged: (value) {
                 _search(value);
@@ -242,53 +270,59 @@ class _FundSearchPageState extends State<FundSearchPage> {
               },
             ),
           ),
-          
+
           // 搜索结果
           Expanded(
-            child: _loading
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(color: Colors.blue),
-                        SizedBox(height: 16),
-                        Text('搜索中...', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                      ],
-                    ),
-                  )
-                : _results.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _controller.text.isEmpty ? Icons.search : Icons.search_off,
-                              size: 80,
-                              color: Colors.grey[300],
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              _controller.text.isEmpty ? '请输入关键词搜索基金' : '未找到相关基金',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[500],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _results.length,
-                        itemBuilder: (context, index) {
-                          final fund = _results[index];
-                          return FundSearchCard(
-                            fund: fund,
-                            onAdd: () => widget.onFundAdded(fund),
-                          );
-                        },
+            child:
+                _loading
+                    ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(color: Colors.blue),
+                          SizedBox(height: 16),
+                          Text(
+                            '搜索中...',
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                        ],
                       ),
+                    )
+                    : _results.isEmpty
+                    ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _controller.text.isEmpty
+                                ? Icons.search
+                                : Icons.search_off,
+                            size: 80,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            _controller.text.isEmpty ? '请输入关键词搜索基金' : '未找到相关基金',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[500],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _results.length,
+                      itemBuilder: (context, index) {
+                        final fund = _results[index];
+                        return FundSearchCard(
+                          fund: fund,
+                          onAdd: () => widget.onFundAdded(fund),
+                        );
+                      },
+                    ),
           ),
         ],
       ),
@@ -299,7 +333,7 @@ class _FundSearchPageState extends State<FundSearchPage> {
 class FundSearchCard extends StatelessWidget {
   final Fund fund;
   final VoidCallback onAdd;
-  
+
   const FundSearchCard({super.key, required this.fund, required this.onAdd});
 
   @override
@@ -319,7 +353,10 @@ class FundSearchCard extends StatelessWidget {
         ],
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 12,
+        ),
         leading: Container(
           width: 50,
           height: 50,
@@ -358,10 +395,7 @@ class FundSearchCard extends StatelessWidget {
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             '代码: ${fund.fundcode}',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
         ),
         trailing: InkWell(

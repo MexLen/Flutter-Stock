@@ -53,29 +53,24 @@ class FundDbHelper {
     print('Sample data loaded');
   }
 
+  Future<List<Map<String, dynamic>>> _loadData() async{
+    List<Map<String,dynamic>> batch=[];
+    final lines =
+        (await rootBundle.loadString('assets/raw/fund.txt')).split('\n');
+    for (var l in lines) {
+      final arr = l.trim().split('|');
+      if (arr.length >= 4) {
+        batch.add({
+          'fundcode': arr[0],
+          'name': arr[2],
+        });
+      }
+    }
+    return batch;
+  }
+
   Future<void> _loadSampleData(Database db) async {
-    final sampleData = [
-      {'fundcode': '000001', 'name': '华夏成长混合'},
-      {'fundcode': '000002', 'name': '华夏策略混合'},
-      {'fundcode': '110022', 'name': '易方达消费行业股票'},
-      {'fundcode': '110003', 'name': '易方达上证50指数A'},
-      {'fundcode': '161725', 'name': '招商中证白酒指数分级'},
-      {'fundcode': '163407', 'name': '兴全沪深300指数LOF'},
-      {'fundcode': '001102', 'name': '前海开源国家比较优势混合'},
-      {'fundcode': '050002', 'name': '博时沪深300指数A'},
-      {'fundcode': '470009', 'name': '汇添富民营活力混合A'},
-      {'fundcode': '519772', 'name': '交银深证300价值ETF联接'},
-      {'fundcode': '016573', 'name': '招商中证银行AH价格优选ETF发起式联接C'},
-      {'fundcode': '003096', 'name': '中欧医疗健康混合A'},
-      {'fundcode': '000376', 'name': '华安中证细分医药ETF联接A'},
-      {'fundcode': '260108', 'name': '景顺长城新兴成长混合'},
-      {'fundcode': '000300', 'name': '嘉实沪深300ETF联接A'},
-      {'fundcode': '519066', 'name': '汇添富蓝筹稳健混合A'},
-      {'fundcode': '040025', 'name': '华安科技动力混合'},
-      {'fundcode': '217005', 'name': '招商先锋混合'},
-      {'fundcode': '000828', 'name': '泰达宏利转型机遇股票'},
-      {'fundcode': '001618', 'name': '天弘中证电子ETF联接A'},
-    ];
+    final sampleData = await _loadData();
 
     // 使用事务批量插入
     await db.transaction((txn) async {
@@ -83,8 +78,7 @@ class FundDbHelper {
       
       for (final data in sampleData) {
         batch.insert('fund', data, conflictAlgorithm: ConflictAlgorithm.ignore);
-      }
-      
+      }      
       await batch.commit();
     });
   }
