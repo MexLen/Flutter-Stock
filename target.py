@@ -1,5 +1,6 @@
 import akshare as ak
-def calculate_meituan_target_price():
+
+def calculate_meituan_target_price(row):
     """基于基本面计算美团目标价"""
     
     print("=== 美团目标价分析 ===")
@@ -7,12 +8,12 @@ def calculate_meituan_target_price():
     # 获取当前价格
     try:
         # hk_spot = ak.stock_hk_spot_em()
-        # meituan_spot = hk_spot[hk_spot['代码'] == '03690']
-        sh_spot = ak.stock_sh_a_spot_em()
-        meituan_spot = sh_spot[sh_spot['代码'] == '600285']
-        current_price = float(meituan_spot['最新价'].iloc[0])
+        # row = hk_spot[hk_spot['代码'] == '03690']
         
-        print(f"当前价格: HK${current_price:.2f}")
+        
+        current_price = float(row['最新价'].iloc[0])
+        
+        print(f"当前价格: ${current_price:.2f}")
         
         # 基于行业估值的目标价计算
         industry_metrics = {
@@ -78,4 +79,11 @@ def calculate_meituan_target_price():
         return None
 
 # 计算目标价
-target_analysis = calculate_meituan_target_price()
+# target_analysis = calculate_meituan_target_price()
+# hk_spot = ak.stock_hk_spot_em()
+sh_spot = ak.stock_sh_a_spot_em()
+bj_spot = ak.stock_bj_a_spot_em()
+sz_spot = ak.stock_sz_a_spot_em()
+for i in range(len(bj_spot)):
+    row = bj_spot.iloc[i]
+    calculate_meituan_target_price(row)

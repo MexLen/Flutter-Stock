@@ -10,12 +10,35 @@ class Fund {
   double dwjz; //"1.4873"  昨日净值
   double gsz; // -> "1.5035"  净值估算
   double gszzl; // -> "1.09" 涨跌幅
-  double back_th=1.0;//回撤超过多少进行提示加仓
+  double back_th = 1.0; //回撤超过多少进行提示加仓
   String gztime; // "2025-06-23 14:36" 当前时间
-  
+
   List<dynamic> backdraw_list = [];
   List<Map<String, dynamic>> history = [];
   List<Map<String, dynamic>> history90 = [];
+
+  // 原有的 fromMap 工厂方法
+  factory Fund.fromMap(Map<String, dynamic> m) => Fund(
+    fundcode: m['code'].toString(),
+    name: m['name'],
+    jzrq: "",
+    dwjz: 0,
+    gsz: 0,
+    gszzl: 0,
+    gztime: "0000 00:00:00",
+  );
+
+  // 新增：从数据库 Map 创建 Fund 对象的工厂方法
+  factory Fund.fromDbMap(Map<String, dynamic> map) => Fund(
+    fundcode: map['fundcode'] as String? ?? '',
+    name: map['name'] as String? ?? '',
+    jzrq: "",
+    dwjz: 0,
+    gsz: 0,
+    gszzl: 0,
+    gztime: "0000-00-00 00:00:00",
+  );
+
   Fund({
     required this.fundcode,
     required this.name,
@@ -25,6 +48,7 @@ class Fund {
     required this.gszzl,
     required this.gztime,
   });
+
   double gain_rate() {
     if (history.isEmpty) {
       return 0.0;
@@ -32,21 +56,21 @@ class Fund {
     var base = double.parse(history.first["DWJZ"]);
     return (gsz - base) / base;
   }
+
+  // 新增：转换为数据库 Map（只包含需要存储的字段）
+  Map<String, dynamic> toDbMap() {
+    return {
+      'fundcode': fundcode,
+      'name': name,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'Fund{fundcode: $fundcode, name: $name}';
+  }
 }
 
-
-/// 折线图版本的 FundChart（LineChart 已经是折线图）
-/// 如果你想要更明显的折线效果（非平滑曲线），只需将 isCurved: false
-
-
-
-// 用法示例：在FundLineChart外部包裹Stack，并传入Fund对象
-// Stack(
-//   children: [
-//     FundLineChart(history: fund.history),
-//     FundInfoHeader(fund: fund),
-//   ],
-// )
 Future<Fund> findFund(String fundCode) async {
   // 根据平台或者是否是浏览器选择HOST
   // dart:io 的 Platform 不能在 web 上用，需判断 kIsWeb
@@ -209,7 +233,7 @@ Future<List<Map<String, dynamic>>> fetchFundTopHoldingsFromEastmoney(
       'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
     },
-  );//https://fund.eastmoney.com/017867.html?spm=search
+  ); //https://fund.eastmoney.com/017867.html?spm=search
   if (response.statusCode == 200) {
     final body = utf8.decode(response.bodyBytes);
     var doc = parser.parse(body);
@@ -218,7 +242,7 @@ Future<List<Map<String, dynamic>>> fetchFundTopHoldingsFromEastmoney(
     for (final tr in trs) {
       var tds = tr.querySelectorAll('td');
       holdings.add({
-        'code':tds.elementAt(0).text.trim(),
+        'code': tds.elementAt(0).text.trim(),
         'name': tds.elementAt(1).text.trim(),
         'percent': tds.elementAt(3).text.trim(),
         'marketValue': tds.elementAt(4).text.trim(),
@@ -231,5 +255,3 @@ Future<List<Map<String, dynamic>>> fetchFundTopHoldingsFromEastmoney(
 }
 
 // lib/top_holdings_page.dart
-
-

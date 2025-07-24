@@ -4,8 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'search.dart';
 import 'detail.dart';
+
 /// 根据基金历史净值数据绘制走势图并保存为JPG图片
 /// 返回图片文件路径
 Future<String> drawFundHistoryChartAsJpg(
@@ -91,10 +92,8 @@ class FundHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-  
-
     return Container(
-      padding: EdgeInsets.all(10),
+      padding: EdgeInsets.all(5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
@@ -103,7 +102,7 @@ class FundHeader extends StatelessWidget {
           SizedBox(width: 60, child: Text('涨跌', textAlign: ui.TextAlign.start)),
           SizedBox(width: 60, child: Text('净值', textAlign: ui.TextAlign.start)),
           SizedBox(width: 60, child: Text('回撤', textAlign: ui.TextAlign.start)),
-          SizedBox(width: 80, child: Text('走势', textAlign: ui.TextAlign.start)),
+          SizedBox(width: 60, child: Text('走势', textAlign: ui.TextAlign.start)),
         ],
       ),
     );
@@ -173,14 +172,17 @@ class FundItemState extends State<FundItem> {
           SizedBox(
             width: 80,
             child: TextButton(
-              onPressed: () => {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context)=>
-                    TopHoldingsPage(fundCode: fund.fundcode)
-                  )
-                )
-              },
+              onPressed:
+                  () => {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) =>
+                                TopHoldingsPage(fundCode: fund.fundcode),
+                      ),
+                    ),
+                  },
 
               child: Stack(
                 children: [
@@ -287,7 +289,13 @@ class FundItemState extends State<FundItem> {
 
 class MyFundList extends StatefulWidget {
   final List<Fund> allFunds;
-  const MyFundList({super.key, required this.allFunds});
+  final Function(VoidCallback)? onRefreshCallbackSet; // 新增回调参数
+
+  const MyFundList({
+    super.key,
+    required this.allFunds,
+    this.onRefreshCallbackSet,
+  });
 
   @override
   State<MyFundList> createState() => _MyFundListState();
@@ -296,30 +304,49 @@ class MyFundList extends StatefulWidget {
 class _MyFundListState extends State<MyFundList> {
   List<String> _myFundCodes = [];
   List<Fund> _myFunds = [];
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadMyFunds();
+    loadMyFunds();
+    // 设置刷新回调函数
+    if (widget.onRefreshCallbackSet != null) {
+      widget.onRefreshCallbackSet!(loadMyFunds);
+    }
   }
 
-  Future<void> _loadMyFunds() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _myFundCodes = prefs.getStringList('my_fund_codes') ?? [];
-    });
-    // 优化：避免重复加载基金，使用Future.wait并行加载
-    if (_myFundCodes.isNotEmpty) {
-      final funds = await Future.wait(_myFundCodes.map(findFund));
-      for (var fund in funds) {
-        fund.history = await fetchFundHistory(fund.fundcode, perPage: 30);
-        fund.backdraw_list = calculateMaxDrawdown(fund.history);
-      }
+  // 公开此方法供外部调用
+  Future<void> loadMyFunds() async {
+    setState(() => _loading = true);
 
+    final prefs = await SharedPreferences.getInstance();
+    final codes = prefs.getStringList('my_fund_codes') ?? [];
+
+    setState(() {
+      _myFundCodes = codes;
+    });
+
+    if (_myFundCodes.isNotEmpty) {
+      try {
+        final funds = await Future.wait(_myFundCodes.map(findFund));
+        for (var fund in funds) {
+          fund.history = await fetchFundHistory(fund.fundcode, perPage: 30);
+          fund.backdraw_list = calculateMaxDrawdown(fund.history);
+        }
+        setState(() {
+          _myFunds = funds;
+        });
+      } catch (e) {
+        print('加载基金数据失败: $e');
+      }
+    } else {
       setState(() {
-        _myFunds = funds;
+        _myFunds = [];
       });
     }
+
+    setState(() => _loading = false);
   }
 
   Future<void> _removeFund(Fund fund) async {
@@ -333,162 +360,188 @@ class _MyFundListState extends State<MyFundList> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              icon: Icon(Icons.search),
-              label: Text('添加基金'),
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => SearchPage(
-                          allFunds: widget.allFunds,
-                          fundCodes: _myFundCodes,
-                        ),
-                  ),
-                );
-                setState(() {
-                  _loadMyFunds();
-                });
-              },
-            ),
-          ),
-        ),
-        const FundHeader(),
-        const Divider(),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _myFunds.length,
-            itemBuilder: (context, index) {
-              final fund = _myFunds[index];
-              return Dismissible(
-                key: Key(fund.fundcode),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  _removeFund(fund);
-                },
-                background: Container(
-                  color: Colors.red,
-                  alignment: Alignment.centerRight,
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Icon(Icons.delete, color: Colors.white),
+    return Container(
+      color: const Color(0xFFF8F9FA),
+      child:
+          _loading
+              ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.blue),
+                    SizedBox(height: 16),
+                    Text(
+                      '加载中...',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ],
                 ),
-                child: FundItem(fund: fund),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class SearchPage extends StatefulWidget {
-  final List<Fund> allFunds;
-  final List<String> fundCodes;
-
-  const SearchPage({super.key, required this.allFunds, required this.fundCodes});
-
-  @override
-  State<SearchPage> createState() => _SearchPageState();
-}
-
-class _SearchPageState extends State<SearchPage> {
-  String _searchText = '';
-  List<Fund> _filteredFunds = [];
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  Future<void> _addFund(Fund fund) async {
-    if (!widget.fundCodes.contains(fund.fundcode)) {
-      fund.history = await fetchFundHistory(fund.fundcode);
-      fund.backdraw_list = calculateMaxDrawdown(fund.history);
-      setState(() {
-        widget.fundCodes.add(fund.fundcode);
-        widget.allFunds.add(fund);
-      });
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('my_fund_codes', widget.fundCodes);
-    }
-  }
-
-  void _onSearchChanged(String value) {
-    setState(() {
-      _searchText = value;
-      _filteredFunds =
-          widget.allFunds
-              .where(
-                (fund) =>
-                    fund.name.contains(_searchText) ||
-                    fund.fundcode.contains(_searchText),
               )
-              .toList();
-    });
-  }
+              : _myFunds.isEmpty
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.inbox_outlined,
+                      size: 80,
+                      color: Colors.grey[300],
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      '暂无自选基金',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '前往搜索页面添加基金',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
+              )
+              : RefreshIndicator(
+                onRefresh: loadMyFunds,
+                child: Column(
+                  children: [
+                    // 表头
+                    Container(
+                      margin: const EdgeInsets.all(5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue[50]!, Colors.blue[100]!],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!, width: 1),
+                      ),
+                      child: const FundHeader(),
+                    ),
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('搜索唧基金')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: InputDecoration(
-                labelText: '搜索基金名称或代码',
-                border: OutlineInputBorder(),
+                    // 添加成功提示区域
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 5),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.blue[600],
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '共 ${_myFunds.length} 只基金',
+                            style: TextStyle(
+                              color: Colors.blue[700],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '左滑删除',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 基金列表
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        itemCount: _myFunds.length,
+                        itemBuilder: (context, index) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  spreadRadius: 1,
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Dismissible(
+                              key: Key(_myFunds[index].fundcode),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.red[400]!,
+                                      Colors.red[600]!,
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.delete,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      '删除',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              onDismissed: (direction) {
+                                final fundName = _myFunds[index].name;
+                                _removeFund(_myFunds[index]);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('$fundName 已删除'),
+                                    backgroundColor: Colors.red,
+                                    duration: const Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                );
+                              },
+                              // child: Padding(
+                                // padding: const EdgeInsets.all(5),
+                                child: FundItem(fund: _myFunds[index]),
+                              // ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (value) async {
-                if (value.length != 6) {
-                  return;
-                }
-                _onSearchChanged(value);
-                // 使用 findFund 方法获取基金信息并保存
-                if (_filteredFunds.isEmpty) {
-                  final fund = await findFund(value);
-                  setState(() {
-                    _filteredFunds.add(fund);
-                  });
-                }
-              },
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _filteredFunds.length,
-              itemBuilder: (context, index) {
-                final fund = _filteredFunds[index];
-                return ListTile(
-                  title: Text('${fund.name} (${fund.fundcode})'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.add),
-                    onPressed: () async {
-                      await _addFund(fund);
-                      FocusScope.of(context).unfocus();
-                      setState(() {
-                        _filteredFunds.clear();
-                      });
-                      // Navigator.pop(context);
-                      if (Navigator.canPop(context)) {
-                        Navigator.pop(context, true); // 传递 true 表示需要刷新
-                      }
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
