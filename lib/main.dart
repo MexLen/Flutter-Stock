@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'db_helper.dart';
 import 'fetch.dart';
 import 'fund.dart';
+import 'news_test_page.dart'; // 添加新闻测试页面导入
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -108,12 +109,11 @@ class _FundHomePageState extends State<FundHomePage>
         _refreshMyFundList!();
       }
     } catch (e) {
-      print('添加基金失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('添加失败，请重试'),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -131,6 +131,20 @@ class _FundHomePageState extends State<FundHomePage>
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          // 添加测试新闻功能的按钮
+          IconButton(
+            icon: const Icon(Icons.science),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NewsTestPage(fundCode: '000001'),
+                ),
+              );
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -202,8 +216,16 @@ class _FundSearchPageState extends State<FundSearchPage> {
         );
       }
     } catch (e) {
-      print('搜索错误: $e');
-      setState(() => _results = []);
+      if (isFundCode(keyword)) {
+        try {
+          var fund = await findFund(keyword);
+          setState(() => _results = [fund]);
+        } catch (e) {
+          setState(() => _results = []);
+        }
+      } else {
+        setState(() => _results = []);
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -248,17 +270,16 @@ class _FundSearchPageState extends State<FundSearchPage> {
                   color: Colors.blue[400],
                   size: 24,
                 ),
-                suffixIcon:
-                    _controller.text.isNotEmpty
-                        ? IconButton(
-                          icon: Icon(Icons.clear, color: Colors.grey[400]),
-                          onPressed: () {
-                            _controller.clear();
-                            _search('');
-                            setState(() {});
-                          },
-                        )
-                        : null,
+                suffixIcon: _controller.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear, color: Colors.grey[400]),
+                        onPressed: () {
+                          _controller.clear();
+                          _search('');
+                          setState(() {});
+                        },
+                      )
+                    : null,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 16,
@@ -273,56 +294,57 @@ class _FundSearchPageState extends State<FundSearchPage> {
 
           // 搜索结果
           Expanded(
-            child:
-                _loading
-                    ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(color: Colors.blue),
-                          SizedBox(height: 16),
-                          Text(
-                            '搜索中...',
-                            style: TextStyle(color: Colors.grey, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    )
-                    : _results.isEmpty
-                    ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _controller.text.isEmpty
-                                ? Icons.search
-                                : Icons.search_off,
-                            size: 80,
-                            color: Colors.grey[300],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            _controller.text.isEmpty ? '请输入关键词搜索基金' : '未找到相关基金',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[500],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _results.length,
-                      itemBuilder: (context, index) {
-                        final fund = _results[index];
-                        return FundSearchCard(
-                          fund: fund,
-                          onAdd: () => widget.onFundAdded(fund),
-                        );
-                      },
+            child: _loading
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Colors.blue),
+                        SizedBox(height: 16),
+                        Text(
+                          '搜索中...',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ],
                     ),
+                  )
+                : _results.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _controller.text.isEmpty
+                                  ? Icons.search
+                                  : Icons.search_off,
+                              size: 80,
+                              color: Colors.grey[300],
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              _controller.text.isEmpty
+                                  ? '请输入关键词搜索基金'
+                                  : '未找到相关基金',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _results.length,
+                        itemBuilder: (context, index) {
+                          final fund = _results[index];
+                          return FundSearchCard(
+                            fund: fund,
+                            onAdd: () => widget.onFundAdded(fund),
+                          );
+                        },
+                      ),
           ),
         ],
       ),

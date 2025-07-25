@@ -81,9 +81,16 @@ def calculate_meituan_target_price(row):
 # 计算目标价
 # target_analysis = calculate_meituan_target_price()
 # hk_spot = ak.stock_hk_spot_em()
-sh_spot = ak.stock_sh_a_spot_em()
-bj_spot = ak.stock_bj_a_spot_em()
-sz_spot = ak.stock_sz_a_spot_em()
-for i in range(len(bj_spot)):
-    row = bj_spot.iloc[i]
-    calculate_meituan_target_price(row)
+# sh_spot = ak.stock_sh_a_spot_em()
+# bj_spot = ak.stock_bj_a_spot_em()
+# sz_spot = ak.stock_sz_a_spot_em()
+# for i in range(len(bj_spot)):
+#     row = bj_spot.iloc[i]
+#     calculate_meituan_target_price(row)
+
+# ak.fund_portfolio_hold_em(symbol="161725")    
+ans = ak.fund_portfolio_hold_em(symbol="017867",date='2025')
+jd = ans['季度'].unique()
+sub =ans[ans['季度']==jd[1]]
+print(ans)
+print(sub)

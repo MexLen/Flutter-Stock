@@ -11,12 +11,10 @@ class FundDbHelper {
   Future<Database> get database async => _db ??= await _initDatabase();
 
   Future<Database> _initDatabase() async {
-    print('Initializing Android SQLite database...');
     
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
     
-    print('Database path: $path');
     
     return openDatabase(
       path,
@@ -26,7 +24,6 @@ class FundDbHelper {
   }
 
   Future<void> _createAndImport(Database db, int version) async {
-    print('Creating tables for Android...');
     
     // 创建主表 - 只保留基金代码和名称
     await db.execute('''
@@ -46,11 +43,9 @@ class FundDbHelper {
       CREATE INDEX idx_name ON fund(name);
     ''');
 
-    print('Tables created successfully');
 
     // 导入初始数据
     await _loadSampleData(db);
-    print('Sample data loaded');
   }
 
   Future<List<Map<String, dynamic>>> _loadData() async{

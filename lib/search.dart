@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// ignore: unused_import
 import 'db_helper.dart';
 import 'fetch.dart';
 
@@ -64,8 +65,7 @@ class _SearchPageState extends State<SearchPage> {
       setState(() => _loading = true);
       try {
         final netFund = await findFund(key);
-        if (netFund != null &&
-            !_results.any((f) => f.fundcode == netFund.fundcode)) {
+        if (!_results.any((f) => f.fundcode == netFund.fundcode)) {
           setState(() => _results.add(netFund));
         }
       } finally {

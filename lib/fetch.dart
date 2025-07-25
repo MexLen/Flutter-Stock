@@ -79,7 +79,7 @@ Future<Fund> findFund(String fundCode) async {
     // 运行在 Web
     host = 'http://localhost:8080/search';
   } else if (Platform.isAndroid) {
-    host = 'https://fundgz.1234567.com.cn';
+    host = 'https://api.jijinnews.com';
   } else {
     host = 'http://localhost:8080/search';
   }
