@@ -1,11 +1,422 @@
-// … 头部 import 不变 …
-
-/* =========== 新增：空页组件 =========== */
+import 'package:Fund/news_page.dart';
 import 'package:flutter/material.dart';
 import 'fund_api.dart';
 import 'fetch.dart';
-import 'holdings_news_page.dart';
-import 'fund_chart_page.dart';
+import 'fund.dart';
+import 'news.dart';
+
+// 基金详情页面
+class FundDetailPage extends StatefulWidget {
+  final Fund fund;
+
+  const FundDetailPage({super.key, required this.fund});
+
+  @override
+  State<FundDetailPage> createState() => _FundDetailPageState();
+}
+
+class _FundDetailPageState extends State<FundDetailPage> {
+  late Future<List<Map<String, dynamic>>> _historyData;
+  late Future<List<HoldingItem>> _holdingsData;
+  late Future<List<FundNews>> _newsData;
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    setState(() {
+      _historyData = fetch3MonthFundHistory(widget.fund.fundcode);
+      _holdingsData = getFundHoldingsWithQuote(widget.fund.fundcode);
+      _newsData = fetchNews(widget.fund.name);
+    });
+  }
+
+  // 计算指定时间段的收益和最大回撤
+  Map<String, dynamic> _calculateReturnAndDrawdown(
+    List<Map<String, dynamic>> history,
+    int days,
+  ) {
+    if (history.length < days) {
+      return {'return': 0.0, 'drawdown': 0.0};
+    }
+
+    // 获取指定时间段的数据
+    final periodData = history.sublist(0, days);
+    final startValue = double.parse(periodData.last['DWJZ']);
+    final endValue = double.parse(periodData.first['DWJZ']);
+
+    // 计算收益
+    final periodReturn = (endValue - startValue) / startValue;
+
+    // 计算最大回撤
+    double maxValue = 0;
+    double maxDrawdown = 0;
+    for (int i = periodData.length - 1; i >= 0; i--) {
+      double curValue = double.parse(periodData[i]['DWJZ']);
+      if (curValue > maxValue) {
+        maxValue = curValue;
+      }
+      double drawdown = (maxValue - curValue) / maxValue;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
+    }
+
+    return {'return': periodReturn, 'drawdown': maxDrawdown};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.fund.name), centerTitle: true),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 基金简介部分
+            _buildFundInfoCard(),
+
+            // 今年净值变化图表
+            _buildYearChart(),
+
+            // 收益展示部分
+            _buildReturnsSection(),
+
+            // 基金持仓信息
+            _buildHoldingsSection(),
+
+            // 基金持仓股新闻
+            _buildNewsSection(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建基金简介卡片
+  Widget _buildFundInfoCard() {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              '基金代码: ${widget.fund.fundcode}',
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildInfoItem('最新净值', widget.fund.gsz.toStringAsFixed(4)),
+                _buildInfoItem(
+                  '涨跌幅',
+                  '${widget.fund.gszzl > 0 ? '+' : ''}${widget.fund.gszzl.toStringAsFixed(2)}%',
+                  isRate: true,
+                  rate: widget.fund.gszzl,
+                ),
+                _buildInfoItem('更新时间', widget.fund.gztime.substring(5)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建信息项
+  Widget _buildInfoItem(
+    String label,
+    String value, {
+    bool isRate = false,
+    double rate = 0,
+  }) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color:
+                isRate ? (rate > 0 ? Colors.red : Colors.green) : Colors.black,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 构建今年净值变化图表
+  Widget _buildYearChart() {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '今年净值走势',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 200,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _historyData,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(child: Text('加载失败: ${snapshot.error}'));
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('暂无数据'));
+                  }
+
+                  final history = snapshot.data!;
+                  // 只取今年的数据
+                  final currentYear = DateTime.now().year;
+                  final yearData =
+                      history.where((item) {
+                        return item['FSRQ'].toString().startsWith(
+                          currentYear.toString(),
+                        );
+                      }).toList();
+
+                  if (yearData.isEmpty) {
+                    return const Center(child: Text('暂无今年数据'));
+                  }
+
+                  return CustomPaint(
+                    size: const Size(double.infinity, 200),
+                    painter: LineChartPainter(yearData),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建收益展示部分
+  Widget _buildReturnsSection() {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '区间收益表现',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _historyData,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('加载失败: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('暂无数据'));
+                }
+
+                final history = snapshot.data!;
+                final return30 = _calculateReturnAndDrawdown(history, 20);
+                final return90 = _calculateReturnAndDrawdown(history, 40);
+                final return180 = _calculateReturnAndDrawdown(history, 60);
+
+                return Column(
+                  children: [
+                    _buildReturnRow(
+                      '近1个月',
+                      return30['return'],
+                      return30['drawdown'],
+                    ),
+                    const Divider(),
+                    _buildReturnRow(
+                      '近3个月',
+                      return90['return'],
+                      return90['drawdown'],
+                    ),
+                    const Divider(),
+                    _buildReturnRow(
+                      '近6个月',
+                      return180['return'],
+                      return180['drawdown'],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建收益行
+  Widget _buildReturnRow(String period, double returnRate, double drawdown) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(period, style: const TextStyle(fontSize: 16)),
+        ),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildReturnItem('收益', returnRate),
+              _buildReturnItem('回撤', drawdown, isDrawdown: true),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 构建收益项
+  Widget _buildReturnItem(
+    String label,
+    double value, {
+    bool isDrawdown = false,
+  }) {
+    final isPositive = value >= 0;
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Text(
+          '${isDrawdown ? "" : (isPositive ? "+" : "")}${(value * 100).toStringAsFixed(2)}%',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color:
+                isDrawdown
+                    ? Colors.orange
+                    : (isPositive ? Colors.red : Colors.green),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 构建基金持仓部分
+  Widget _buildHoldingsSection() {
+    return FutureBuilder<List<HoldingItem>>(
+      future: _holdingsData,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('加载失败: ${snapshot.error}'));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('暂无持仓数据'));
+        }
+
+        final holdings = snapshot.data!;
+        return TopHoldingsPage(holdings: holdings);
+      },
+    );
+  }
+
+  Widget _buildNewsSection() {
+    return Card(
+      child: FutureBuilder<List<FundNews>>(
+        future: _newsData,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('加载失败: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('暂无持仓数据'));
+          }
+
+          final news_list = snapshot.data!;
+          return FundNewsPage(news_list: news_list);
+        },
+      ),
+    );
+  }
+
+  // 构建单个持仓项
+}
+
+// 构建新闻部分
+
+// 折线图绘制器
+class LineChartPainter extends CustomPainter {
+  final List<Map<String, dynamic>> data;
+
+  LineChartPainter(this.data);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final paint =
+        Paint()
+          ..color = Colors.blue
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke;
+
+    final points = <Offset>[];
+    final values = data.map((e) => double.parse(e['DWJZ'])).toList();
+    final minVal = values.reduce((a, b) => a < b ? a : b);
+    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final range = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+
+    final dx = size.width / (data.length - 1);
+
+    for (int i = 0; i < data.length; i++) {
+      final value = double.parse(data[i]['DWJZ']);
+      final dy = size.height - ((value - minVal) / range) * size.height;
+      points.add(Offset(i * dx, dy));
+    }
+
+    final path = Path();
+    path.moveTo(points[0].dx, points[0].dy);
+    for (int i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+/* =========== 新增：空页组件 =========== */
 
 class _EmptyPlaceholder extends StatelessWidget {
   const _EmptyPlaceholder();
@@ -89,84 +500,6 @@ class _SkeletonHoldingTile extends StatelessWidget {
   );
 }
 
-/* =========== 新增：骨架屏盒子 =========== */
-class _SkeletonBox extends StatelessWidget {
-  final double width;
-  final double height;
-  
-  const _SkeletonBox({required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade300,
-        borderRadius: BorderRadius.circular(4),
-      ),
-    );
-  }
-}
-
-/* =========== 新增：基金信息项 =========== */
-class _FundInfoItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final String? subValue;
-  final bool? isPositive;
-
-  const _FundInfoItem({
-    required this.label,
-    required this.value,
-    this.subValue,
-    this.isPositive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (subValue != null) ...[
-              const SizedBox(width: 8),
-              Text(
-                subValue!,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isPositive == null 
-                    ? Colors.grey 
-                    : isPositive! 
-                      ? Colors.red 
-                      : Colors.green,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 /* =========== HeaderCell 微调 =========== */
 class _HeaderCell extends StatelessWidget {
   final String label;
@@ -191,376 +524,109 @@ class _HeaderCell extends StatelessWidget {
 /* =========== BodyCell 微调 =========== */
 class _BodyCell extends StatelessWidget {
   final String value;
-
-  const _BodyCell(this.value);
+  final TextStyle? style;
+  const _BodyCell(this.value, {this.style});
   @override
   Widget build(BuildContext context) {
     return Text(
       value,
       textAlign: TextAlign.center,
       overflow: TextOverflow.ellipsis,
-      
+      style:
+          style ?? const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
     );
   }
 }
 
-class TopHoldingsPage extends StatefulWidget {
-  final String fundCode;
-  final String fundName;
+class TopHoldingsPage extends StatelessWidget {
+  final List<HoldingItem> holdings;
 
-  const TopHoldingsPage({super.key, required this.fundCode, this.fundName = ''});
+  const TopHoldingsPage({super.key, required this.holdings});
 
-  @override
-  _TopHoldingsPageState createState() => _TopHoldingsPageState();
-}
-
-/* =========== 主要界面改造 =========== */
-class _TopHoldingsPageState extends State<TopHoldingsPage> with SingleTickerProviderStateMixin {
-  Future<List<Map<String, dynamic>>>? _topHoldings;
-  Future<Fund>? _fundFuture;
-  late TabController _tabController;
-  List<HoldingItem> _holdings = []; // 保存持仓数据
-
-  Future<void> loadTopHoldings() async {
-    try {
-      // 同时获取基金基本信息和持仓信息
-      final fund = await findFund(widget.fundCode);
-      final holdings = await getFundHoldingsWithQuote(
-        widget.fundCode,
-      ); // ← 新 API
-      // await attachChangePct(holdings);
-      setState(() {
-        _fundFuture = Future.value(fund); // 保存基金信息
-        _holdings = holdings; // 保存持仓信息
-        
-        // 将 List<HoldingItem> 转成原来的 Map 形式，UI 零改动
-        _topHoldings = Future.value(
-          holdings
-              .map(
-                (e) => {
-                  'name': e.name,
-                  'code': e.code,
-                  'percent': e.percent,
-                  'marketValue': e.marketValue,
-                  'changePct': e.changePct?.toStringAsFixed(2) ?? '--',
-                },
-              )
-              .toList(),
-        );
-      });
-    } catch (e) {
-      setState(() {
-        _topHoldings = Future.error(e);
-        _fundFuture = Future.error(e);
-      });
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    loadTopHoldings();
-    _tabController = TabController(length: 3, vsync: this); // 更新标签页数量为3
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text('基金详情'),
-        centerTitle: true,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blue.shade600, Colors.blue.shade900],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '持仓'),
-            Tab(text: '持仓新闻'),
-            Tab(text: '基金图表'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
+    return SizedBox(
+      height: 500,
+      child: Column(
         children: [
-          // 持仓页面
-          _buildHoldingsPage(),
-          // 持仓股票新闻页面
-          HoldingsNewsPage(
-            holdings: _holdings,
-            fundCode: widget.fundCode,
-          ),
-          // 基金图表页面
-          FundChartPage(fundCode: widget.fundCode),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHoldingsPage() {
-    return Column(
-      children: [
-        // 添加基金基本信息展示区域
-        FutureBuilder<Fund>(
-          future: _fundFuture,
-          builder: (context, snapshot) {
-            if (snapshot.hasData) {
-              final fund = snapshot.data!;
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.2),
-                      spreadRadius: 1,
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          fund.name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            fund.fundcode,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.blue,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _FundInfoItem(
-                          label: '最新净值',
-                          value: fund.gsz.toStringAsFixed(4),
-                          subValue:
-                              '${fund.gszzl > 0 ? '+' : ''}${fund.gszzl.toStringAsFixed(2)}%',
-                          isPositive: fund.gszzl > 0,
-                        ),
-                        _FundInfoItem(
-                          label: '更新时间',
-                          value: fund.gztime.substring(5), // 去掉年份显示
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            } else if (snapshot.hasError) {
-              return Container(
-                padding: const EdgeInsets.all(16),
-                child: Text('加载基金信息失败: ${snapshot.error}'),
-              );
-            }
-            // 加载中状态
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: kToolbarHeight + 8),
+          // 表头卡片
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              color: Colors.blue.shade50,
+              margin: EdgeInsets.zero,
+              child: Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(2),
+                  1: FlexColumnWidth(1),
+                  2: FlexColumnWidth(1),
+                  3: FlexColumnWidth(1),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
-                  _SkeletonBox(width: 120, height: 20),
-                  SizedBox(height: 8),
-                  _SkeletonBox(width: 200, height: 16),
-                  SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _SkeletonBox(width: 100, height: 16),
-                      _SkeletonBox(width: 100, height: 16),
+                  TableRow(
+                    children: const [
+                      _HeaderCell('股票名称'),
+                      _HeaderCell('代码'),
+                      _HeaderCell('占比'),
+                      _HeaderCell('市值(亿)'),
                     ],
                   ),
                 ],
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        // 原有的持仓信息部分
-        Expanded(
-          child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: _topHoldings,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return ListView.separated(
-                  padding: const EdgeInsets.only(top: 16),
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: 6,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (_, __) => const _SkeletonHoldingTile(),
-                );
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 64,
-                        color: Colors.red.shade300,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '加载失败',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: loadTopHoldings,
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('重新加载'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const _EmptyPlaceholder();
-              }
-
-              final data = snapshot.data!;
-              return Column(
-                children: [
-                  // 表头卡片
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      color: Colors.blue.shade50,
-                      margin: EdgeInsets.zero,
-                      child: Table(
-                        columnWidths: const {
-                          0: FlexColumnWidth(2),
-                          1: FlexColumnWidth(1),
-                          2: FlexColumnWidth(1),
-                          3: FlexColumnWidth(1),
-                        },
-                        defaultVerticalAlignment:
-                            TableCellVerticalAlignment.middle,
-                        children: [
-                          TableRow(
-                            children: const [
-                              _HeaderCell('股票名称'),
-                              _HeaderCell('代码'),
-                              _HeaderCell('占比'),
-                              _HeaderCell('市值(亿)'),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // 列表主体
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: data.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (_, idx) {
-                        final s = data[idx];
-                        return Card(
-                          elevation: 0.5,
-                          margin: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          color: idx.isEven ? Colors.white : Colors.grey.shade50,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                              horizontal: 12,
-                            ),
-                            child: Table(
-                              columnWidths: const {
-                                0: FlexColumnWidth(2),
-                                1: FlexColumnWidth(1),
-                                2: FlexColumnWidth(1),
-                                3: FlexColumnWidth(1),
-                              },
-                              defaultVerticalAlignment:
-                                  TableCellVerticalAlignment.middle,
-                              children: [
-                                TableRow(
-                                  children: [
-                                    _BodyCell(s['name']),
-                                    _BodyCell(s['code']),
-                                    _BodyCell(s['percent']),
-                                    _BodyCell('${s['marketValue']}'),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
+            ),
           ),
-        ),
-      ],
+          // 列表主体
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: holdings.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              itemBuilder: (_, idx) {
+                final s = holdings[idx];
+                return Card(
+                  elevation: 0.5,
+                  margin: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  color: idx.isEven ? Colors.white : Colors.grey.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 12,
+                    ),
+                    child: Table(
+                      columnWidths: const {
+                        0: FlexColumnWidth(2),
+                        1: FlexColumnWidth(1),
+                        2: FlexColumnWidth(1),
+                        3: FlexColumnWidth(1),
+                      },
+                      defaultVerticalAlignment:
+                          TableCellVerticalAlignment.middle,
+                      children: [
+                        TableRow(
+                          children: [
+                            _BodyCell(s.name),
+                            _BodyCell(s.code),
+                            _BodyCell(s.percent),
+                            _BodyCell('${s.marketValue}'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

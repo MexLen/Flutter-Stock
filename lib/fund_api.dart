@@ -1,6 +1,10 @@
+// ignore_for_file: unused_import
+
+import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as parser;
+import 'news.dart';
 
 /// 一条持仓记录的数据结构
 class HoldingItem {
@@ -36,6 +40,55 @@ class HoldingItem {
 }
 
 /// 解析形如 temp.log 的非标 JSON/HTML 混合格式
+Future<List<FundNews>> fetchNews(String name) async {
+  return [];
+  var param = {
+    "uid": "",
+    "keyword": name,
+    "type": ["cmsArticleWebOld"],
+    "client": "web",
+    "clientType": "web",
+    "clientVersion": "curr",
+    "param": {
+      "cmsArticleWebOld": {
+        "searchScope": "title",
+        "sort": "default",
+        "pageIndex": 1,
+        "pageSize": 10,
+        "preTag": "<em>",
+        "postTag": "</em>",
+      },
+    },
+  };
+  final jsonStr = jsonEncode(param);
+  final uri = Uri.https("search-api-web.eastmoney.com", "/search/jsonp", {
+    'cb': 'jQuery351029815737696449274_1753697613133',
+    'param': jsonStr,
+  });
+  print(uri.toString());
+  final response = await http.get(uri);
+  final rawText = response.body;
+
+  final openBrace = rawText.indexOf('{');
+  final closeBrace = rawText.lastIndexOf('}');
+  final jsonText = rawText.substring(openBrace, closeBrace + 1);
+  List<FundNews> newsList = [];
+  final json = jsonDecode(jsonText);
+  for (var item in json['result']['cmsArticleWebOld'].sublist(0, 5)) {
+    NewsSentiment newsSentiment = analyzeSentiment(item['content']);
+    var cur_new = FundNews(
+      id: item['code'],
+      title: item['title'],
+      summary: item['content'],
+      url: item['url'],
+      publishTime: item['date'],
+      source: item['mediaName'],
+      sentiment: newsSentiment,
+    );
+    newsList.add(cur_new);
+  }
+  return newsList;
+}
 
 /// 解析形如 temp.log 的非标 JSON/HTML 混合格式
 Future<List<HoldingItem>> parseQuarterlyHoldingsFromHtmlText(
@@ -55,7 +108,7 @@ Future<List<HoldingItem>> parseQuarterlyHoldingsFromHtmlText(
   final doc = parser.parse(html);
 
   // 3️⃣ 遍历每一个 table（即每一季度）
-  final tables = doc.querySelectorAll('table.w782.comm.tzxq.t2');
+  final tables = doc.querySelectorAll('table');
   final List<HoldingItem> latestQuarterItems = [];
 
   // 我们只想要最新的一季（第一个 table）
@@ -87,17 +140,12 @@ Future<List<HoldingItem>> parseQuarterlyHoldingsFromHtmlText(
 /// 1️⃣ 天天基金网 – 基金前十大持仓
 Future<List<HoldingItem>> fetchFundPortfolioHoldEm({
   required String symbol,
-  String year = '2024',
+  String year = '2025',
 }) async {
   String host = "";
-  if (identical(0, 0.0)) {
-    // Web
-    host = 'http://localhost:8080/eastmoney';
-  } else if (Platform.isAndroid) {
-    host = 'https://fundmobapi.eastmoney.com';
-  } else {
-    host = 'http://localhost:8080/eastmoney';
-  }
+
+  host = 'https://fundf10.eastmoney.com';
+
   final uri = Uri.parse('$host/FundArchivesDatas.aspx').replace(
     queryParameters: {
       'type': 'jjcc',
@@ -119,7 +167,6 @@ Future<List<HoldingItem>> fetchFundPortfolioHoldEm({
 }
 
 /// 2️⃣ 根据持仓代码实时抓取涨跌幅
-
 
 /// 整合函数：先拿持仓，再补行情
 Future<List<HoldingItem>> getFundHoldingsWithQuote(String fundCode) async {

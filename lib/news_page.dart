@@ -4,215 +4,23 @@ import 'package:flutter/material.dart';
 import 'news.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io'; // 添加平台特定功能支持
+import 'news.dart';
 
-class FundNewsPage extends StatefulWidget {
-  final String fundCode;
-  final String fundName;
+class FundNewsPage extends StatelessWidget {
+  final List<FundNews> news_list;
 
-  const FundNewsPage({
-    Key? key,
-    required this.fundCode,
-    required this.fundName,
-  }) : super(key: key);
-
-  @override
-  State<FundNewsPage> createState() => _FundNewsPageState();
-}
-
-class _FundNewsPageState extends State<FundNewsPage> {
-  late Future<List<FundNews>> _newsFuture;
-  final ScrollController _scrollController = ScrollController();
-  final List<FundNews> _newsList = [];
-  int _currentPage = 1;
-  bool _isLoading = false;
-  bool _hasMore = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNews();
-    
-    // 添加滚动监听器以实现无限滚动加载
-    _scrollController.addListener(_scrollListener);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_scrollListener);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _scrollListener() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMoreNews();
-    }
-  }
-
-  Future<void> _loadNews() async {
-    setState(() {
-      _newsFuture = fetchFundNews(widget.fundCode, page: 1, pageSize: 10);
-    });
-    
-    try {
-      final news = await _newsFuture;
-      if (!mounted) return; // 检查组件是否仍然挂载
-      
-      setState(() {
-        _newsList.clear();
-        _newsList.addAll(news);
-        _currentPage = 1;
-        _hasMore = news.length == 10; // 如果返回少于请求数量，说明没有更多数据
-      });
-    } catch (e) {
-      if (!mounted) return; // 检查组件是否仍然挂载
-      // 错误处理在FutureBuilder中完成
-    }
-  }
-
-  Future<void> _loadMoreNews() async {
-    if (_isLoading || !_hasMore) return;
-    
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      final news = await fetchFundNews(
-        widget.fundCode, 
-        page: _currentPage + 1, 
-        pageSize: 10
-      );
-      
-      if (!mounted) return; // 检查组件是否仍然挂载
-      
-      setState(() {
-        _newsList.addAll(news);
-        _currentPage++;
-        _hasMore = news.length == 10; // 如果返回少于请求数量，说明没有更多数据
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return; // 检查组件是否仍然挂载
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('加载更多新闻失败'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _refreshNews() async {
-    _loadNews();
-  }
+  const FundNewsPage({Key? key, required this.news_list}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _refreshNews,
-        child: FutureBuilder<List<FundNews>>(
-          future: _newsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildLoadingIndicator();
-            } else if (snapshot.hasError) {
-              return _buildErrorWidget(snapshot.error.toString());
-            } else if (snapshot.hasData) {
-              final newsList = snapshot.data!;
-              if (newsList.isEmpty) {
-                return _buildEmptyWidget();
-              }
-              return _buildNewsList();
-            } else {
-              return _buildEmptyWidget();
-            }
-          },
-        ),
+      appBar: AppBar(title: const Text('相关新闻'), centerTitle: true),
+      body: ListView.builder(
+        itemCount: news_list.length,
+        itemBuilder: (context, index) {
+          return _NewsItem(news: news_list[index]);
+        },
       ),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('正在加载新闻...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget(String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 48,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          Text('加载新闻失败: $error'),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _loadNews,
-            child: const Text('重新加载'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.article_outlined,
-            size: 48,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '暂无相关新闻',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNewsList() {
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _newsList.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _newsList.length) {
-          // 显示加载指示器
-          return _isLoading 
-            ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : Container();
-        }
-        
-        final news = _newsList[index];
-        return _NewsItem(news: news);
-      },
     );
   }
 }
@@ -227,9 +35,7 @@ class _NewsItem extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _launchURL(news.url, context),
         borderRadius: BorderRadius.circular(12),
@@ -263,19 +69,13 @@ class _NewsItem extends StatelessWidget {
                   // 来源
                   Text(
                     news.source,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   const Spacer(),
                   // 时间
                   Text(
                     news.publishTime,
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   ),
                 ],
               ),
@@ -358,10 +158,7 @@ class _NewsItem extends StatelessWidget {
     } else {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('无法打开链接: $url'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('无法打开链接: $url'), backgroundColor: Colors.red),
         );
       }
     }

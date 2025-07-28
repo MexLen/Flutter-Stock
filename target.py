@@ -92,5 +92,7 @@ def calculate_meituan_target_price(row):
 ans = ak.fund_portfolio_hold_em(symbol="017867",date='2025')
 jd = ans['季度'].unique()
 sub =ans[ans['季度']==jd[1]]
+
+
+ans = ak.fund_open_fund_info_em(symbol="017867",period='3月',indicator='累计收益率走势')
 print(ans)
-print(sub)

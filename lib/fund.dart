@@ -13,9 +13,9 @@ Future<String> drawFundHistoryChartAsJpg(
   String? fileName,
 }) async {
   if (history.isEmpty) throw Exception('历史数据为空');
-  const width = 800.0;
-  const height = 400.0;
-  const padding = 40.0;
+  final width = 800.0;
+  final height = 400.0;
+  final padding = 40.0;
 
   // 解析净值数据
   final values =
@@ -24,7 +24,7 @@ Future<String> drawFundHistoryChartAsJpg(
   final maxValue = values.reduce((a, b) => a > b ? a : b);
 
   final recorder = ui.PictureRecorder();
-  final canvas = ui.Canvas(recorder, const ui.Rect.fromLTWH(0, 0, width, height));
+  final canvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, width, height));
   final paint =
       ui.Paint()
         ..color = const Color(0xFF1976D2)
@@ -33,7 +33,7 @@ Future<String> drawFundHistoryChartAsJpg(
 
   // 背景
   canvas.drawRect(
-    const ui.Rect.fromLTWH(0, 0, width, height),
+    ui.Rect.fromLTWH(0, 0, width, height),
     ui.Paint()..color = const Color(0xFFF5F5F5),
   );
 
@@ -44,14 +44,14 @@ Future<String> drawFundHistoryChartAsJpg(
         ..strokeWidth = 1;
   // Y轴
   canvas.drawLine(
-    const ui.Offset(padding, padding),
-    const ui.Offset(padding, height - padding),
+    ui.Offset(padding, padding),
+    ui.Offset(padding, height - padding),
     axisPaint,
   );
   // X轴
   canvas.drawLine(
-    const ui.Offset(padding, height - padding),
-    const ui.Offset(width - padding, height - padding),
+    ui.Offset(padding, height - padding),
+    ui.Offset(width - padding, height - padding),
     axisPaint,
   );
 
@@ -92,8 +92,8 @@ class FundHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(5),
-      child: const Row(
+      padding: EdgeInsets.all(5),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
         children: [
@@ -131,21 +131,21 @@ class FundItemState extends State<FundItem> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("修改回撤阈值"),
+          title: Text("修改回撤阈值"),
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: "请输入新值"),
+            decoration: InputDecoration(labelText: "请输入新值"),
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text("取消"),
+              child: Text("取消"),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text("确认"),
+              child: Text("确认"),
               onPressed: () {
                 double newValue = double.parse(controller.text);
                 fund.back_th = newValue;
@@ -164,7 +164,7 @@ class FundItemState extends State<FundItem> {
     double times = (fund.backdraw_list.last.abs() / fund.back_th);
     var notifiy = BadgeWid(times: times);
     return Container(
-      padding: const EdgeInsets.all(0),
+      padding: EdgeInsets.all(0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -176,12 +176,7 @@ class FundItemState extends State<FundItem> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (context) =>
-                                TopHoldingsPage(
-                                  fundCode: fund.fundcode,
-                                  fundName: fund.name, // 传递基金名称
-                                ),
+                        builder: (context) => FundDetailPage(fund: fund),
                       ),
                     ),
                   },
@@ -194,12 +189,12 @@ class FundItemState extends State<FundItem> {
                         fund.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10, color: Colors.black87),
+                        style: TextStyle(fontSize: 10, color: Colors.black87),
                       ),
                       Text(
                         fund.fundcode,
                         textAlign: TextAlign.start,
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -224,7 +219,7 @@ class FundItemState extends State<FundItem> {
             width: 60,
             child: Text(
               fund.gsz.toStringAsFixed(2),
-              style: const TextStyle(fontSize: 15),
+              style: TextStyle(fontSize: 15),
             ),
           ),
           SizedBox(
@@ -265,7 +260,7 @@ class FundItemState extends State<FundItem> {
               ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+                  return Center(
                     child: SizedBox(
                       width: 24,
                       height: 24,
@@ -277,7 +272,7 @@ class FundItemState extends State<FundItem> {
                   return Center(child: Text('加载失败: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('暂无持仓数据'));
+                  return Center(child: Text('暂无持仓数据'));
                 }
                 return Image.file(File(snapshot.data!), fit: BoxFit.contain);
               },
@@ -533,8 +528,8 @@ class _MyFundListState extends State<MyFundList> {
                                 );
                               },
                               // child: Padding(
-                                // padding: const EdgeInsets.all(5),
-                                child: FundItem(fund: _myFunds[index]),
+                              // padding: const EdgeInsets.all(5),
+                              child: FundItem(fund: _myFunds[index]),
                               // ),
                             ),
                           );
@@ -555,14 +550,14 @@ class BadgeWid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         // color: Colors.red,
         // border: Border.all(width: 0),
         shape: BoxShape.circle,
       ),
       child: Text(
         'x${times.toStringAsFixed(1)}',
-        style: const TextStyle(color: Colors.red, fontSize: 8),
+        style: TextStyle(color: Colors.red, fontSize: 8),
       ),
     );
   }

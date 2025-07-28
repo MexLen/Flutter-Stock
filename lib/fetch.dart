@@ -59,10 +59,7 @@ class Fund {
 
   // 新增：转换为数据库 Map（只包含需要存储的字段）
   Map<String, dynamic> toDbMap() {
-    return {
-      'fundcode': fundcode,
-      'name': name,
-    };
+    return {'fundcode': fundcode, 'name': name};
   }
 
   @override
@@ -75,14 +72,8 @@ Future<Fund> findFund(String fundCode) async {
   // 根据平台或者是否是浏览器选择HOST
   // dart:io 的 Platform 不能在 web 上用，需判断 kIsWeb
   String host;
-  if (identical(0, 0.0)) {
-    // 运行在 Web
-    host = 'http://localhost:8080/search';
-  } else if (Platform.isAndroid) {
-    host = 'https://api.jijinnews.com';
-  } else {
-    host = 'http://localhost:8080/search';
-  }
+  host = 'https://fundgz.1234567.com.cn';
+
   // #016343
   final url = Uri.parse(
     '$host/js/$fundCode.js?rt=${DateTime.now().millisecondsSinceEpoch}',
@@ -120,6 +111,19 @@ Future<Fund> findFund(String fundCode) async {
   }
 }
 
+Future<List<Map<String, dynamic>>> fetch3MonthFundHistory(
+  String fundCode,
+) async {
+  List<Map<String, dynamic>> history_list = [];
+  // 天天基金历史净值接口
+  for (var i in [1, 2, 3]) {
+    var history = await fetchFundHistory(fundCode, page: i, perPage: 30);
+    history_list.addAll(history);
+  }
+  history_list = history_list.reversed.toList();
+  return history_list;
+}
+
 // 获取基金历史净值数据
 Future<List<Map<String, dynamic>>> fetchFundHistory(
   String fundCode, {
@@ -128,14 +132,9 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
 }) async {
   // 天天基金历史净值接口
   String host;
-  if (identical(0, 0.0)) {
-    // 运行在 Web
-    host = 'http://localhost:8080/api';
-  } else if (Platform.isAndroid) {
-    host = 'https://api.fund.eastmoney.com';
-  } else {
-    host = 'http://localhost:8080/api';
-  }
+
+  host = 'https://api.fund.eastmoney.com';
+
   final url = Uri.parse(
     '$host/f10/lsjz?callback=&fundCode=$fundCode&pageIndex=$page&pageSize=$perPage&startDate=&endDate=&_=${DateTime.now().millisecondsSinceEpoch}',
   );
@@ -160,37 +159,6 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
 
 /// 获取基金持仓信息（前十大重仓股）
 /// 返回格式：List<Map<String, dynamic>>，每个map包含股票名称、代码、占比等
-Future<List<Map<String, dynamic>>> fetchFundHoldings(String fundCode) async {
-  String host;
-  if (identical(0, 0.0)) {
-    // Web
-    host = 'http://localhost:8080/api';
-  } else if (Platform.isAndroid) {
-    host = 'https://fundmobapi.eastmoney.com';
-  } else {
-    host = 'http://localhost:8080/api';
-  }
-  final url = Uri.parse(
-    '$host/FundMNewApi/FundMNInverstPositionList?FCODE=$fundCode',
-  );
-  final response = await http.get(
-    url,
-    headers: {
-      'Referer': 'https://fundf10.eastmoney.com/',
-      'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-    },
-  );
-  if (response.statusCode == 200) {
-    final body = utf8.decode(response.bodyBytes);
-    final jsonMap = json.decode(body);
-    // 解析前十大重仓股
-    final List<dynamic> stocks = jsonMap['Datas']?[0]?['GPList'] ?? [];
-    return stocks.cast<Map<String, dynamic>>();
-  } else {
-    throw Exception('Failed to load fund holdings');
-  }
-}
 
 List<dynamic> calculateMaxDrawdown(List<Map<String, dynamic>> history) {
   double maxValue = 0;
@@ -211,47 +179,6 @@ bool buyStrategy(List<dynamic> drawList, int idx, {double downrate = 0.1}) {
     return true;
   }
   return false;
-}
-
-Future<List<Map<String, dynamic>>> fetchFundTopHoldingsFromEastmoney(
-  String fundCode,
-) async {
-  String host;
-  if (identical(0, 0.0)) {
-    // Web
-    host = 'http://localhost:8080/find';
-  } else if (Platform.isAndroid) {
-    host = 'https://www.dayfund.cn';
-  } else {
-    host = 'http://localhost:8080/find';
-  }
-  final url = Uri.parse('$host/fundinfo/$fundCode.html');
-  final response = await http.get(
-    url,
-    headers: {
-      'Referer': 'https://www.dayfund.cn/',
-      'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-    },
-  ); //https://fund.eastmoney.com/017867.html?spm=search
-  if (response.statusCode == 200) {
-    final body = utf8.decode(response.bodyBytes);
-    var doc = parser.parse(body);
-    var trs = doc.querySelectorAll('div.ownstock tr').sublist(1, 11);
-    List<Map<String, dynamic>> holdings = [];
-    for (final tr in trs) {
-      var tds = tr.querySelectorAll('td');
-      holdings.add({
-        'code': tds.elementAt(0).text.trim(),
-        'name': tds.elementAt(1).text.trim(),
-        'percent': tds.elementAt(3).text.trim(),
-        'marketValue': tds.elementAt(4).text.trim(),
-      });
-    }
-    // 提取持仓表格数据
-    return holdings;
-  }
-  return [];
 }
 
 // lib/top_holdings_page.dart
