@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'fund_api.dart';
 import 'fetch.dart';
 import 'news.dart';
+import 'trading_strategy.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // 基金详情页面
@@ -17,6 +18,11 @@ class FundDetailPage extends StatefulWidget {
 class _FundDetailPageState extends State<FundDetailPage> {
   late Future<List<Map<String, dynamic>>> _historyData;
   late Future<List<HoldingItem>> _holdingsData;
+
+  // 添加策略对象
+  final FundTradingStrategy _tradingStrategy = FundTradingStrategy();
+  final MovingAverageStrategy _maStrategy = MovingAverageStrategy();
+  final RSIStrategy _rsiStrategy = RSIStrategy();
 
   @override
   void initState() {
@@ -81,6 +87,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
             // 基金简介部分
             _buildFundInfoCard(),
 
+            // 交易信号部分
+            _buildTradingSignalSection(),
+
             // 今年净值变化图表
             _buildYearChart(),
 
@@ -93,6 +102,243 @@ class _FundDetailPageState extends State<FundDetailPage> {
         ),
       ),
     );
+  }
+
+  // 构建交易信号部分
+  Widget _buildTradingSignalSection() {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '交易信号',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _historyData,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('加载失败: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('暂无数据'));
+                }
+
+                final history = snapshot.data!;
+                return _buildTradingSignals(history);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建交易信号展示
+  Widget _buildTradingSignals(List<Map<String, dynamic>> history) {
+    // 获取净值数据
+    final prices = history.map((e) => double.parse(e['DWJZ'].toString())).toList();
+    
+    if (prices.isEmpty) {
+      return const Center(child: Text('无净值数据'));
+    }
+
+    // 计算回撤
+    final drawdownList = _calculateDrawdownList(history);
+    
+    // 获取最新的信号
+    final latestIndex = prices.length - 1;
+    
+    // 基于回撤的信号
+    final drawdownSignal = _tradingStrategy.getTradingSignal(
+      drawdownList: drawdownList,
+      currentIndex: latestIndex,
+    );
+    
+    // 均线策略信号
+    final maSignal = _maStrategy.checkSignal(prices, latestIndex);
+    
+    // RSI策略信号
+    final rsiSignal = _rsiStrategy.checkSignal(prices, latestIndex);
+    
+    // 计算当前收益（相对于最早日期）
+    final currentReturn = (prices.last - prices.first) / prices.first;
+    
+    return Column(
+      children: [
+        _buildSignalItem('回撤策略', drawdownSignal, currentReturn),
+        const Divider(),
+        _buildSignalItem('均线策略', maSignal, currentReturn),
+        const Divider(),
+        _buildSignalItem('RSI策略', rsiSignal, currentReturn),
+        const SizedBox(height: 16),
+        _buildOverallRecommendation([
+          drawdownSignal,
+          maSignal,
+          rsiSignal,
+        ]),
+      ],
+    );
+  }
+
+  // 构建单个交易信号项
+  Widget _buildSignalItem(String strategyName, StrategyResult signal, double currentReturn) {
+    Color signalColor;
+    IconData signalIcon;
+    
+    switch (signal.signal) {
+      case TradingSignal.buy:
+        signalColor = Colors.red;
+        signalIcon = Icons.trending_up;
+        break;
+      case TradingSignal.sell:
+        signalColor = Colors.green;
+        signalIcon = Icons.trending_down;
+        break;
+      case TradingSignal.hold:
+        signalColor = Colors.blue;
+        signalIcon = Icons.remove;
+        break;
+      default:
+        signalColor = Colors.grey;
+        signalIcon = Icons.help_outline;
+    }
+    
+    return Row(
+      children: [
+        Icon(signalIcon, color: signalColor, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                strategyName,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                signal.reason,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              if (signal.confidence < 1.0)
+                Text(
+                  '置信度: ${(signal.confidence * 100).toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Text(
+          _getSignalText(signal.signal),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: signalColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 获取信号文本
+  String _getSignalText(TradingSignal signal) {
+    switch (signal) {
+      case TradingSignal.buy:
+        return '买入';
+      case TradingSignal.sell:
+        return '卖出';
+      case TradingSignal.hold:
+        return '持有';
+      default:
+        return '观望';
+    }
+  }
+
+  // 构建总体建议
+  Widget _buildOverallRecommendation(List<StrategyResult> signals) {
+    int buySignals = signals.where((s) => s.signal == TradingSignal.buy).length;
+    int sellSignals = signals.where((s) => s.signal == TradingSignal.sell).length;
+    int holdSignals = signals.where((s) => s.signal == TradingSignal.hold).length;
+    
+    String recommendation;
+    Color recommendationColor;
+    IconData recommendationIcon;
+    
+    if (buySignals > sellSignals && buySignals >= holdSignals) {
+      recommendation = '总体建议：买入';
+      recommendationColor = Colors.red;
+      recommendationIcon = Icons.trending_up;
+    } else if (sellSignals > buySignals && sellSignals >= holdSignals) {
+      recommendation = '总体建议：卖出';
+      recommendationColor = Colors.green;
+      recommendationIcon = Icons.trending_down;
+    } else {
+      recommendation = '总体建议：持有';
+      recommendationColor = Colors.blue;
+      recommendationIcon = Icons.remove;
+    }
+    
+    return Row(
+      children: [
+        Icon(recommendationIcon, color: recommendationColor),
+        const SizedBox(width: 8),
+        Text(
+          recommendation,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: recommendationColor,
+          ),
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '买入:$buySignals 卖出:$sellSignals 持有:$holdSignals',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 计算回撤列表
+  List<double> _calculateDrawdownList(List<Map<String, dynamic>> history) {
+    double maxValue = 0;
+    final List<double> drawdownList = [];
+    
+    for (int i = 0; i < history.length; i++) {
+      double curValue = double.parse(history[i]['DWJZ'].toString());
+      if (curValue > maxValue) {
+        maxValue = curValue;
+      }
+      double drawdown = (maxValue - curValue) / maxValue;
+      drawdownList.add(drawdown);
+    }
+    
+    return drawdownList;
   }
 
   // 构建基金简介卡片
@@ -186,7 +432,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
                   final history = snapshot.data!;
                   // 只取今年的数据
-                  final currentYear = DateTime.now().year;
                   final yearData = history;
 
                   return SizedBox(
@@ -405,87 +650,7 @@ class LineChartPainter extends CustomPainter {
 
 /* =========== 新增：空页组件 =========== */
 
-class _EmptyPlaceholder extends StatelessWidget {
-  const _EmptyPlaceholder();
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.pie_chart_outline_rounded,
-            size: 96,
-            color: Colors.blue.shade200,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '暂无持仓数据',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '该组合暂未公布最新持仓',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-/* =========== 新增：骨架屏 =========== */
-class _SkeletonHoldingTile extends StatelessWidget {
-  const _SkeletonHoldingTile();
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: _shimmerBox(
-                double.infinity,
-                14,
-                radius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _shimmerBox(48, 14, radius: BorderRadius.circular(4)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _shimmerBox(36, 14, radius: BorderRadius.circular(4)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _shimmerBox(44, 14, radius: BorderRadius.circular(4)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _shimmerBox(double w, double h, {BorderRadius? radius}) => Container(
-    width: w,
-    height: h,
-    decoration: BoxDecoration(
-      color: Colors.grey.shade300,
-      borderRadius: radius ?? BorderRadius.circular(4),
-    ),
-  );
-}
 
 /* =========== HeaderCell 微调 =========== */
 class _HeaderCell extends StatelessWidget {

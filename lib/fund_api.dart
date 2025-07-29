@@ -64,7 +64,6 @@ Future<List<FundNews>> fetchNews(String name) async {
     'cb': 'jQuery351029815737696449274_1753697613133',
     'param': jsonStr,
   });
-  print(uri.toString());
   final response = await http.get(uri);
   final rawText = response.body;
 
@@ -75,7 +74,7 @@ Future<List<FundNews>> fetchNews(String name) async {
   final json = jsonDecode(jsonText);
   for (var item in json['result']['cmsArticleWebOld'].sublist(0, 5)) {
     NewsSentiment newsSentiment = analyzeSentiment(item['content']);
-    var cur_new = FundNews(
+    var curNew = FundNews(
       id: item['code'],
       title: item['title']
           .toString()
@@ -87,9 +86,33 @@ Future<List<FundNews>> fetchNews(String name) async {
       source: item['mediaName'],
       sentiment: newsSentiment,
     );
-    newsList.add(cur_new);
+    newsList.add(curNew);
   }
   return newsList;
+}
+
+NewsSentiment analyzeSentiment(item) {
+  final content = item['content'] ?? '';
+  final positiveWords = ['好', '上涨', '增长', '强劲', '利好'];
+  final negativeWords = ['坏', '下跌', '减少', '疲软', '利空'];
+
+  int positiveCount = 0;
+  int negativeCount = 0;
+
+  for (var word in positiveWords) {
+    if (content.contains(word)) positiveCount++;
+  }
+  for (var word in negativeWords) {
+    if (content.contains(word)) negativeCount++;
+  }
+
+  if (positiveCount > negativeCount) {
+    return NewsSentiment.positive;
+  } else if (negativeCount > positiveCount) {
+    return NewsSentiment.negative;
+  } else {
+    return NewsSentiment.neutral;
+  }
 }
 
 /// 解析形如 temp.log 的非标 JSON/HTML 混合格式

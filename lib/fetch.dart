@@ -165,7 +165,7 @@ List<dynamic> calculateMaxDrawdown(List<Map<String, dynamic>> history) {
   double maxValue = 0;
   final List<double> drawList = [];
   for (int i = 0; i < history.length; i++) {
-    double curValue = double.parse(history[i]['DWJZ'] ?? '0')  ?? 0.0;
+    double curValue = double.parse(history[i]['DWJZ'] ?? '0');
     if (curValue > maxValue) {
       maxValue = curValue;
     }
