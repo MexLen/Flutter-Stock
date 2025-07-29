@@ -19,7 +19,7 @@ Future<String> drawFundHistoryChartAsJpg(
 
   // 解析净值数据
   final values =
-      history.map((e) => double.tryParse(e['DWJZ'] ?? '0') ?? 0).toList();
+      history.map((e) => double.parse(e['DWJZ'] ?? '0') ?? 0.0).toList();
   final minValue = values.reduce((a, b) => a < b ? a : b);
   final maxValue = values.reduce((a, b) => a > b ? a : b);
 
@@ -328,7 +328,7 @@ class _MyFundListState extends State<MyFundList> {
       try {
         final funds = await Future.wait(_myFundCodes.map(findFund));
         for (var fund in funds) {
-          fund.history = await fetchFundHistory(fund.fundcode, perPage: 30);
+          fund.history = await fetchFundHistory(fund.fundcode, month: 1);
           fund.backdraw_list = calculateMaxDrawdown(fund.history);
         }
         setState(() {

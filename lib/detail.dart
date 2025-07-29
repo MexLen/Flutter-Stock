@@ -1,9 +1,8 @@
-import 'package:Fund/news_page.dart';
 import 'package:flutter/material.dart';
 import 'fund_api.dart';
 import 'fetch.dart';
-import 'fund.dart';
 import 'news.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // 基金详情页面
 class FundDetailPage extends StatefulWidget {
@@ -18,7 +17,7 @@ class FundDetailPage extends StatefulWidget {
 class _FundDetailPageState extends State<FundDetailPage> {
   late Future<List<Map<String, dynamic>>> _historyData;
   late Future<List<HoldingItem>> _holdingsData;
-  late Future<List<FundNews>> _newsData;
+
   @override
   void initState() {
     super.initState();
@@ -27,25 +26,28 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   void _loadData() {
     setState(() {
-      _historyData = fetch3MonthFundHistory(widget.fund.fundcode);
+      // 默认使用天天基金接口
+      _historyData = fetchFundHistory(widget.fund.fundcode, month: 6);
       _holdingsData = getFundHoldingsWithQuote(widget.fund.fundcode);
-      _newsData = fetchNews(widget.fund.name);
     });
   }
 
   // 计算指定时间段的收益和最大回撤
   Map<String, dynamic> _calculateReturnAndDrawdown(
     List<Map<String, dynamic>> history,
-    int days,
+    int month,
   ) {
-    if (history.length < days) {
-      return {'return': 0.0, 'drawdown': 0.0};
-    }
+    DateTime start_date = getPeriod(month);
 
     // 获取指定时间段的数据
-    final periodData = history.sublist(0, days);
-    final startValue = double.parse(periodData.last['DWJZ']);
-    final endValue = double.parse(periodData.first['DWJZ']);
+    final periodData =
+        history.where((item) {
+          DateTime date = DateTime.parse(item['DATE']);
+          return date.isAfter(start_date);
+        }).toList();
+
+    final startValue = double.parse(periodData.first['DWJZ']);
+    final endValue = double.parse(periodData.last['DWJZ']);
 
     // 计算收益
     final periodReturn = (endValue - startValue) / startValue;
@@ -53,7 +55,8 @@ class _FundDetailPageState extends State<FundDetailPage> {
     // 计算最大回撤
     double maxValue = 0;
     double maxDrawdown = 0;
-    for (int i = periodData.length - 1; i >= 0; i--) {
+
+    for (int i = 0; i < periodData.length; i++) {
       double curValue = double.parse(periodData[i]['DWJZ']);
       if (curValue > maxValue) {
         maxValue = curValue;
@@ -86,9 +89,6 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
             // 基金持仓信息
             _buildHoldingsSection(),
-
-            // 基金持仓股新闻
-            _buildNewsSection(),
           ],
         ),
       ),
@@ -163,7 +163,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '今年净值走势',
+              '近6月净值走势',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -187,20 +187,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
                   final history = snapshot.data!;
                   // 只取今年的数据
                   final currentYear = DateTime.now().year;
-                  final yearData =
-                      history.where((item) {
-                        return item['FSRQ'].toString().startsWith(
-                          currentYear.toString(),
-                        );
-                      }).toList();
+                  final yearData = history;
 
-                  if (yearData.isEmpty) {
-                    return const Center(child: Text('暂无今年数据'));
-                  }
-
-                  return CustomPaint(
-                    size: const Size(double.infinity, 200),
-                    painter: LineChartPainter(yearData),
+                  return SizedBox(
+                    height: 200,
+                    width: double.infinity,
+                    child: CustomPaint(painter: LineChartPainter(yearData)),
                   );
                 },
               ),
@@ -241,9 +233,9 @@ class _FundDetailPageState extends State<FundDetailPage> {
                 }
 
                 final history = snapshot.data!;
-                final return30 = _calculateReturnAndDrawdown(history, 20);
-                final return90 = _calculateReturnAndDrawdown(history, 40);
-                final return180 = _calculateReturnAndDrawdown(history, 60);
+                final return30 = _calculateReturnAndDrawdown(history, 1);
+                final return90 = _calculateReturnAndDrawdown(history, 3);
+                final return180 = _calculateReturnAndDrawdown(history, 6);
 
                 return Column(
                   children: [
@@ -323,47 +315,42 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   // 构建基金持仓部分
   Widget _buildHoldingsSection() {
-    return FutureBuilder<List<HoldingItem>>(
-      future: _holdingsData,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('加载失败: ${snapshot.error}'));
-        }
-
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('暂无持仓数据'));
-        }
-
-        final holdings = snapshot.data!;
-        return TopHoldingsPage(holdings: holdings);
-      },
-    );
-  }
-
-  Widget _buildNewsSection() {
     return Card(
-      child: FutureBuilder<List<FundNews>>(
-        future: _newsData,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+      child: Padding(
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 5, 0, 0),
+              child: const Text(
+                '基金持仓',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<HoldingItem>>(
+              future: _holdingsData,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          if (snapshot.hasError) {
-            return Center(child: Text('加载失败: ${snapshot.error}'));
-          }
+                if (snapshot.hasError) {
+                  return Center(child: Text('加载失败: ${snapshot.error}'));
+                }
 
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('暂无持仓数据'));
-          }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('暂无持仓数据'));
+                }
 
-          final news_list = snapshot.data!;
-          return FundNewsPage(news_list: news_list);
-        },
+                final holdings = snapshot.data!;
+                return TopHoldingsPage(holdings: holdings);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -543,12 +530,13 @@ class TopHoldingsPage extends StatelessWidget {
 
   const TopHoldingsPage({super.key, required this.holdings});
 
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 500,
       child: Column(
         children: [
-          const SizedBox(height: kToolbarHeight + 8),
+          // const SizedBox(height: kToolbarHeight + 8),
           // 表头卡片
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -573,7 +561,7 @@ class TopHoldingsPage extends StatelessWidget {
                       _HeaderCell('股票名称'),
                       _HeaderCell('代码'),
                       _HeaderCell('占比'),
-                      _HeaderCell('市值(亿)'),
+                      _HeaderCell('新闻'),
                     ],
                   ),
                 ],
@@ -615,7 +603,28 @@ class TopHoldingsPage extends StatelessWidget {
                             _BodyCell(s.name),
                             _BodyCell(s.code),
                             _BodyCell(s.percent),
-                            _BodyCell('${s.marketValue}'),
+                            GestureDetector(
+                              onTap: () {
+                                // 跳转到新闻页面
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => StockNewsPage(
+                                          stockCode: s.code,
+                                          stockName: s.name,
+                                        ),
+                                  ),
+                                );
+                              },
+                              child: _BodyCell(
+                                '查看',
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -626,6 +635,215 @@ class TopHoldingsPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 新闻项组件，从news_page.dart中复制并修改
+class _NewsItem extends StatelessWidget {
+  final FundNews news;
+
+  const _NewsItem({required this.news});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _launchURL(news.url, context),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // 情感标签
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getSentimentColor(news.sentiment),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _getSentimentText(news.sentiment),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 来源
+                  Text(
+                    news.source,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const Spacer(),
+                  // 时间
+                  Text(
+                    news.publishTime,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // 标题
+              Text(
+                news.title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 摘要
+              Text(
+                news.summary,
+                style: TextStyle(
+                  color: Colors.grey[700],
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              // 阅读更多
+              Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '阅读全文',
+                      style: TextStyle(
+                        color: Theme.of(context).primaryColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 12,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getSentimentColor(NewsSentiment sentiment) {
+    switch (sentiment) {
+      case NewsSentiment.positive:
+        return Colors.green;
+      case NewsSentiment.negative:
+        return Colors.red;
+      case NewsSentiment.neutral:
+        return Colors.grey;
+    }
+  }
+
+  String _getSentimentText(NewsSentiment sentiment) {
+    switch (sentiment) {
+      case NewsSentiment.positive:
+        return '利好';
+      case NewsSentiment.negative:
+        return '利空';
+      case NewsSentiment.neutral:
+        return '中性';
+    }
+  }
+}
+
+Future<void> _launchURL(String url, BuildContext context) async {
+  final uri = Uri.parse(url);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
+  } else {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('无法打开链接: $url'), backgroundColor: Colors.red),
+      );
+    }
+  }
+}
+
+// 股票新闻页面
+class StockNewsPage extends StatefulWidget {
+  final String stockCode;
+  final String stockName;
+
+  const StockNewsPage({
+    super.key,
+    required this.stockCode,
+    required this.stockName,
+  });
+
+  @override
+  State<StockNewsPage> createState() => _StockNewsPageState();
+}
+
+class _StockNewsPageState extends State<StockNewsPage> {
+  late Future<List<FundNews>> _newsData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNews();
+  }
+
+  void _loadNews() {
+    // 模拟获取股票新闻数据
+    // 实际项目中这里应该调用真实的API获取数据
+    setState(() {
+      _newsData = fetchNews(widget.stockName);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${widget.stockName} 相关新闻'),
+        centerTitle: true,
+      ),
+      body: FutureBuilder<List<FundNews>>(
+        future: _newsData,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('加载失败: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('暂无相关新闻'));
+          }
+
+          final newsList = snapshot.data!;
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: newsList.length,
+            itemBuilder: (context, index) {
+              return _NewsItem(news: newsList[index]);
+            },
+          );
+        },
       ),
     );
   }

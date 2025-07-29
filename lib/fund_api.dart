@@ -41,7 +41,6 @@ class HoldingItem {
 
 /// 解析形如 temp.log 的非标 JSON/HTML 混合格式
 Future<List<FundNews>> fetchNews(String name) async {
-  return [];
   var param = {
     "uid": "",
     "keyword": name,
@@ -78,7 +77,10 @@ Future<List<FundNews>> fetchNews(String name) async {
     NewsSentiment newsSentiment = analyzeSentiment(item['content']);
     var cur_new = FundNews(
       id: item['code'],
-      title: item['title'],
+      title: item['title']
+          .toString()
+          .replaceAll('<em>', '')
+          .replaceAll('</em>', ''),
       summary: item['content'],
       url: item['url'],
       publishTime: item['date'],
@@ -121,15 +123,15 @@ Future<List<HoldingItem>> parseQuarterlyHoldingsFromHtmlText(
 
     final name = cells[2].text.trim();
     final code = cells[1].text.trim();
-    final percent = cells[4].text.trim();
-    final mvWan = double.tryParse(cells[5].text.trim()) ?? 0.0;
+    final percent = cells[6].text.trim();
+    final mvWan = double.tryParse(cells[8].text.trim()) ?? 0.0;
 
     latestQuarterItems.add(
       HoldingItem(
         name: name,
         code: code,
         percent: percent,
-        marketValue: mvWan / 10000, // 万元→亿元
+        marketValue: mvWan// 10000 , // 万元→亿元
       ),
     );
   }

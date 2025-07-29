@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as parser;
 
 class Fund {
   String fundcode; // "016573"
@@ -111,52 +109,55 @@ Future<Fund> findFund(String fundCode) async {
   }
 }
 
-Future<List<Map<String, dynamic>>> fetch3MonthFundHistory(
-  String fundCode,
-) async {
-  List<Map<String, dynamic>> history_list = [];
-  // 天天基金历史净值接口
-  for (var i in [1, 2, 3]) {
-    var history = await fetchFundHistory(fundCode, page: i, perPage: 30);
-    history_list.addAll(history);
-  }
-  history_list = history_list.reversed.toList();
-  return history_list;
-}
+
 
 // 获取基金历史净值数据
+
+DateTime getPeriod(int months) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month - months, now.day-1);
+}
+
 Future<List<Map<String, dynamic>>> fetchFundHistory(
   String fundCode, {
-  int page = 1,
-  int perPage = 20,
+  int month = 1,
 }) async {
-  // 天天基金历史净值接口
-  String host;
-
-  host = 'https://api.fund.eastmoney.com';
+  // 新浪财经基金历史净值接口
 
   final url = Uri.parse(
-    '$host/f10/lsjz?callback=&fundCode=$fundCode&pageIndex=$page&pageSize=$perPage&startDate=&endDate=&_=${DateTime.now().millisecondsSinceEpoch}',
+    'http://stock.finance.sina.com.cn/fundInfo/api/openapi.php/CaihuiFundInfoService.getNav?symbol=$fundCode&page=1&num=200',
   );
-  final response = await http.get(
-    url,
-    headers: {
-      'Referer': 'https://fundf10.eastmoney.com/',
-      'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-    },
-  );
-  utf8.decode(response.bodyBytes);
+  DateTime startDate = getPeriod(month);
+  final response = await http.get(url);
+  List<Map<String, dynamic>> history = [];
   if (response.statusCode == 200) {
     final body = utf8.decode(response.bodyBytes);
     final jsonMap = json.decode(body);
-    final List<dynamic> data = jsonMap['Data']['LSJZList'];
-    return data.cast<Map<String, dynamic>>().reversed.toList();
+
+    // 检查返回结果是否成功
+    if (jsonMap['result'] != null && jsonMap['result']['data'] != null) {
+      final data = jsonMap['result']['data']['data'];
+      for (var his in data) {
+        var date = DateTime.parse(his['fbrq'].toString());
+        if (date.isBefore(startDate)) {
+          break;
+        }
+        history.add({
+          'DATE': his['fbrq'],
+          'DWJZ': his['jjjz'],
+          'LJJZ': his['ljjz'],
+        });
+      }
+      if (data != null) {
+        return history.reversed.toList();
+      }
+    }
+
+    throw Exception('Failed to parse fund history data from Sina');
   } else {
-    throw Exception('Failed to load fund history');
+    throw Exception('Failed to load fund history from Sina');
   }
 }
-
 /// 获取基金持仓信息（前十大重仓股）
 /// 返回格式：List<Map<String, dynamic>>，每个map包含股票名称、代码、占比等
 
@@ -164,7 +165,7 @@ List<dynamic> calculateMaxDrawdown(List<Map<String, dynamic>> history) {
   double maxValue = 0;
   final List<double> drawList = [];
   for (int i = 0; i < history.length; i++) {
-    double curValue = double.tryParse(history[i]['DWJZ']) ?? 0.0;
+    double curValue = double.parse(history[i]['DWJZ'] ?? '0')  ?? 0.0;
     if (curValue > maxValue) {
       maxValue = curValue;
     }

@@ -110,14 +110,4 @@ NewsSentiment analyzeSentiment(String title) {
   return NewsSentiment.neutral;
 }
 
-/// 标准化股票代码（去除市场标识符）
-String _normalizeStockCode(String code) {
-  // 去除SH、SZ、HK等后缀
-  code = code.replaceAll(RegExp(r'[A-Za-z]+$'), '');
-  // 确保代码是6位数字
-  if (RegExp(r'^\d{6}$').hasMatch(code)) {
-    return code;
-  }
-  return '';
-}
 
