@@ -118,6 +118,9 @@ class _FundHomePageState extends State<FundHomePage>
           duration: const Duration(seconds: 2),
         ),
       );
+      if (_refreshMyFundList != null) {
+        _refreshMyFundList!();
+      }
     }
   }
 
@@ -143,7 +146,9 @@ class _FundHomePageState extends State<FundHomePage>
         setState(() => _searchResults = [fund]);
       } else {
         setState(
-          () => _searchResults = results.map((map) => Fund.fromDbMap(map)).toList(),
+          () =>
+              _searchResults =
+                  results.map((map) => Fund.fromDbMap(map)).toList(),
         );
       }
     } catch (e) {
@@ -209,16 +214,17 @@ class _FundHomePageState extends State<FundHomePage>
                   color: Colors.blue[400],
                   size: 24,
                 ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, color: Colors.grey[400]),
-                        onPressed: () {
-                          _searchController.clear();
-                          _searchFunds('');
-                          setState(() {});
-                        },
-                      )
-                    : null,
+                suffixIcon:
+                    _searchController.text.isNotEmpty
+                        ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.grey[400]),
+                          onPressed: () {
+                            _searchController.clear();
+                            _searchFunds('');
+                            setState(() {});
+                          },
+                        )
+                        : null,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 18,
@@ -233,12 +239,14 @@ class _FundHomePageState extends State<FundHomePage>
 
           // 主要内容区域
           Expanded(
-            child: _searching 
-                ? _buildSearchResults() // 显示搜索结果
-                : MyFundList(
-                    allFunds: const [],
-                    onRefreshCallbackSet: _setRefreshCallback,
-                  ), // 显示我的基金
+            child:
+                _searching
+                    ? _buildSearchResults() // 显示搜索结果
+                    : MyFundList(
+                      allFunds: const [],
+                      onRefreshCallbackSet: _setRefreshCallback,
+                      dbHelper: _dbHelper,
+                    ), // 显示我的基金
           ),
         ],
       ),
@@ -249,57 +257,56 @@ class _FundHomePageState extends State<FundHomePage>
   Widget _buildSearchResults() {
     return Container(
       color: const Color(0xFFF8F9FA),
-      child: _loadingSearch
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.blue),
-                  SizedBox(height: 16),
-                  Text(
-                    '搜索中...',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
-                  ),
-                ],
-              ),
-            )
-          : _searchResults.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _searchController.text.isEmpty
-                            ? Icons.search
-                            : Icons.search_off,
-                        size: 80,
-                        color: Colors.grey[300],
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        _searchController.text.isEmpty
-                            ? '请输入关键词搜索基金'
-                            : '未找到相关基金',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey[500],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _searchResults.length,
-                  itemBuilder: (context, index) {
-                    final fund = _searchResults[index];
-                    return _FundSearchCard(
-                      fund: fund,
-                      onAdd: () => _addFundAndSwitchTab(fund),
-                    );
-                  },
+      child:
+          _loadingSearch
+              ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.blue),
+                    SizedBox(height: 16),
+                    Text(
+                      '搜索中...',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ],
                 ),
+              )
+              : _searchResults.isEmpty
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _searchController.text.isEmpty
+                          ? Icons.search
+                          : Icons.search_off,
+                      size: 80,
+                      color: Colors.grey[300],
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      _searchController.text.isEmpty ? '请输入关键词搜索基金' : '未找到相关基金',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+              : ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  final fund = _searchResults[index];
+                  return _FundSearchCard(
+                    fund: fund,
+                    onAdd: () => _addFundAndSwitchTab(fund),
+                  );
+                },
+              ),
     );
   }
 }

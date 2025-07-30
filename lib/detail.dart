@@ -16,7 +16,7 @@ class FundDetailPage extends StatefulWidget {
 }
 
 class _FundDetailPageState extends State<FundDetailPage> {
-  late Future<List<Map<String, dynamic>>> _historyData;
+  late Future<List<FundHistory>> _historyData;
   late Future<List<HoldingItem>> _holdingsData;
 
   // 添加策略对象
@@ -40,7 +40,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
   // 计算指定时间段的收益和最大回撤
   Map<String, dynamic> _calculateReturnAndDrawdown(
-    List<Map<String, dynamic>> history,
+    List<FundHistory> history,
     int month,
   ) {
     DateTime start_date = getPeriod(month);
@@ -48,12 +48,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
     // 获取指定时间段的数据
     final periodData =
         history.where((item) {
-          DateTime date = DateTime.parse(item['DATE']);
+          DateTime date = DateTime.parse(item.date);
           return date.isAfter(start_date);
         }).toList();
 
-    final startValue = double.parse(periodData.first['DWJZ']);
-    final endValue = double.parse(periodData.last['DWJZ']);
+    final startValue = periodData.first.dwjz;
+    final endValue = periodData.last.dwjz;
 
     // 计算收益
     final periodReturn = (endValue - startValue) / startValue;
@@ -63,7 +63,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
     double maxDrawdown = 0;
 
     for (int i = 0; i < periodData.length; i++) {
-      double curValue = double.parse(periodData[i]['DWJZ']);
+      double curValue = periodData[i].dwjz;
       if (curValue > maxValue) {
         maxValue = curValue;
       }
@@ -118,7 +118,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            FutureBuilder<List<Map<String, dynamic>>>(
+            FutureBuilder<List<FundHistory>>(
               future: _historyData,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -144,10 +144,10 @@ class _FundDetailPageState extends State<FundDetailPage> {
   }
 
   // 构建交易信号展示
-  Widget _buildTradingSignals(List<Map<String, dynamic>> history) {
+  Widget _buildTradingSignals(List<FundHistory> history) {
     // 获取净值数据
-    final prices = history.map((e) => double.parse(e['DWJZ'].toString())).toList();
-    
+    final prices = history.map((e) => e.dwjz).toList();
+
     if (prices.isEmpty) {
       return const Center(child: Text('无净值数据'));
     }
@@ -325,12 +325,12 @@ class _FundDetailPageState extends State<FundDetailPage> {
   }
 
   // 计算回撤列表
-  List<double> _calculateDrawdownList(List<Map<String, dynamic>> history) {
+  List<double> _calculateDrawdownList(List<FundHistory> history) {
     double maxValue = 0;
     final List<double> drawdownList = [];
     
     for (int i = 0; i < history.length; i++) {
-      double curValue = double.parse(history[i]['DWJZ'].toString());
+      double curValue = history[i].dwjz ?? 0;
       if (curValue > maxValue) {
         maxValue = curValue;
       }
@@ -415,7 +415,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
             const SizedBox(height: 16),
             SizedBox(
               height: 200,
-              child: FutureBuilder<List<Map<String, dynamic>>>(
+              child: FutureBuilder<List<FundHistory>>(
                 future: _historyData,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -462,7 +462,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            FutureBuilder<List<Map<String, dynamic>>>(
+            FutureBuilder<List<FundHistory>>(
               future: _historyData,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -607,7 +607,7 @@ class _FundDetailPageState extends State<FundDetailPage> {
 
 // 折线图绘制器
 class LineChartPainter extends CustomPainter {
-  final List<Map<String, dynamic>> data;
+  final List<FundHistory> data;
 
   LineChartPainter(this.data);
 
@@ -622,7 +622,7 @@ class LineChartPainter extends CustomPainter {
           ..style = PaintingStyle.stroke;
 
     final points = <Offset>[];
-    final values = data.map((e) => double.parse(e['DWJZ'])).toList();
+    final values = data.map((e) => e.dwjz).toList();
     final minVal = values.reduce((a, b) => a < b ? a : b);
     final maxVal = values.reduce((a, b) => a > b ? a : b);
     final range = maxVal - minVal == 0 ? 1 : maxVal - minVal;
@@ -630,7 +630,7 @@ class LineChartPainter extends CustomPainter {
     final dx = size.width / (data.length - 1);
 
     for (int i = 0; i < data.length; i++) {
-      final value = double.parse(data[i]['DWJZ']);
+      final value = data[i].dwjz;
       final dy = size.height - ((value - minVal) / range) * size.height;
       points.add(Offset(i * dx, dy));
     }

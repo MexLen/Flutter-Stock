@@ -1,6 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+class FundHistory {
+  String date;
+  double dwjz; // 昨日净值
+  double ljjz; // 累计净值
+  FundHistory({required this.date, required this.dwjz, required this.ljjz});
+}
+
 class Fund {
   String fundcode; // "016573"
   String name; // -> "招商中证银行AH价格优选ETF发起式联接C"
@@ -12,8 +19,8 @@ class Fund {
   String gztime; // "2025-06-23 14:36" 当前时间
 
   List<dynamic> backdraw_list = [];
-  List<Map<String, dynamic>> history = [];
-  List<Map<String, dynamic>> history90 = [];
+  List<FundHistory> history = [];
+  List<FundHistory> history90 = [];
 
   // 原有的 fromMap 工厂方法
   factory Fund.fromMap(Map<String, dynamic> m) => Fund(
@@ -51,7 +58,7 @@ class Fund {
     if (history.isEmpty) {
       return 0.0;
     }
-    var base = double.parse(history.first["DWJZ"]);
+    var base = history.first.dwjz;
     return (gsz - base) / base;
   }
 
@@ -105,20 +112,19 @@ Future<Fund> findFund(String fundCode) async {
     );
     return fund;
   } else {
+    print('Faild load $fundCode');
     throw Exception('Failed to load fund data');
   }
 }
-
-
 
 // 获取基金历史净值数据
 
 DateTime getPeriod(int months) {
   final now = DateTime.now();
-  return DateTime(now.year, now.month - months, now.day-1);
+  return DateTime(now.year, now.month - months, now.day - 1);
 }
 
-Future<List<Map<String, dynamic>>> fetchFundHistory(
+Future<List<FundHistory>> fetchFundHistory(
   String fundCode, {
   int month = 1,
 }) async {
@@ -129,7 +135,7 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
   );
   DateTime startDate = getPeriod(month);
   final response = await http.get(url);
-  List<Map<String, dynamic>> history = [];
+  List<FundHistory> history = [];
   if (response.statusCode == 200) {
     final body = utf8.decode(response.bodyBytes);
     final jsonMap = json.decode(body);
@@ -142,12 +148,15 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
         if (date.isBefore(startDate)) {
           break;
         }
-        history.add({
-          'DATE': his['fbrq'],
-          'DWJZ': his['jjjz'],
-          'LJJZ': his['ljjz'],
-        });
+        history.add(
+          FundHistory(
+            date: his['fbrq'],
+            dwjz: double.parse(his['jjjz']),
+            ljjz: double.parse(his['ljjz']),
+          ),
+        );
       }
+
       if (data != null) {
         return history.reversed.toList();
       }
@@ -158,14 +167,15 @@ Future<List<Map<String, dynamic>>> fetchFundHistory(
     throw Exception('Failed to load fund history from Sina');
   }
 }
+
 /// 获取基金持仓信息（前十大重仓股）
 /// 返回格式：List<Map<String, dynamic>>，每个map包含股票名称、代码、占比等
 
-List<dynamic> calculateMaxDrawdown(List<Map<String, dynamic>> history) {
+List<dynamic> calculateMaxDrawdown(List<FundHistory> history) {
   double maxValue = 0;
   final List<double> drawList = [];
   for (int i = 0; i < history.length; i++) {
-    double curValue = double.parse(history[i]['DWJZ'] ?? '0');
+    double curValue = history[i].dwjz ?? 0;
     if (curValue > maxValue) {
       maxValue = curValue;
     }

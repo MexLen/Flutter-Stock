@@ -77,11 +77,9 @@ class _SearchPageState extends State<SearchPage> {
   /* ------------------- 添加自选 ------------------- */
   Future<void> _addFund(Fund fund) async {
     if (widget.fundCodes.contains(fund.fundcode)) return;
-    if (fund.gsz == 0) {
-      fund = await findFund(fund.fundcode);
-      // 从缓存获取的基金需要重新查询
-    }
+
     fund.history = await fetchFundHistory(fund.fundcode);
+    
     fund.backdraw_list = calculateMaxDrawdown(fund.history);
 
     setState(() {

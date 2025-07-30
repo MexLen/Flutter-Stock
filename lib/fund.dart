@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'db_helper.dart';
 import 'fetch.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -7,8 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'detail.dart';
-import 'dart:typed_data';
-import 'dart:ui' show Image, Picture;
 
 // 添加图表缓存管理器
 class ChartCacheManager {
@@ -24,7 +23,7 @@ class ChartCacheManager {
     if (!_chartTimeCache.containsKey(fundCode)) {
       return true;
     }
-    
+
     final lastUpdate = _chartTimeCache[fundCode]!;
     final now = DateTime.now();
     return now.difference(lastUpdate).inHours >= 1;
@@ -45,16 +44,16 @@ class ChartCacheManager {
 /// 根据基金历史净值数据绘制走势图并保存为图片
 /// 返回图片文件路径
 Future<String> drawFundHistoryChartAsJpg(
-  List<Map<String, dynamic>> history, {
+  List<FundHistory> history, {
   String? fileName,
 }) async {
   // 检查参数
   if (history.isEmpty) throw Exception('历史数据为空');
-  
+
   // 检查是否有缓存的图表
   final fundCode = fileName?.replaceAll('_thumb', '') ?? 'unknown';
   final cacheManager = ChartCacheManager();
-  
+
   if (!cacheManager.shouldUpdateChart(fundCode)) {
     final cachedPath = cacheManager.getChartPath(fundCode);
     if (cachedPath != null && File(cachedPath).existsSync()) {
@@ -67,8 +66,7 @@ Future<String> drawFundHistoryChartAsJpg(
   final padding = 40.0;
 
   // 解析净值数据
-  final values =
-      history.map((e) => double.tryParse(e['DWJZ'] ?? '0') ?? 0).toList();
+  final values = history.map((e) => e.dwjz).toList();
   final minValue = values.reduce((a, b) => a < b ? a : b);
   final maxValue = values.reduce((a, b) => a > b ? a : b);
 
@@ -121,23 +119,23 @@ Future<String> drawFundHistoryChartAsJpg(
     }
   }
   canvas.drawPath(path, paint);
-  
+
   // 保存为图片
   final picture = recorder.endRecording();
   final img = await picture.toImage(width.toInt(), height.toInt());
   final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
   final buffer = byteData!.buffer.asUint8List();
-  
+
   // 保存到缓存
   final dir = await getTemporaryDirectory();
   final fileNameToUse = fileName ?? 'fund_chart';
   final file = await File(
     '${dir.path}/${fileNameToUse}.png',
   ).writeAsBytes(buffer);
-  
+
   // 更新缓存
   cacheManager.saveChartPath(fundCode, file.path);
-  
+
   return file.path;
 }
 
@@ -165,7 +163,7 @@ class FundHeader extends StatelessWidget {
 
 class FundItem extends StatefulWidget {
   final Fund fund;
-  
+
   const FundItem({super.key, required this.fund});
 
   @override
@@ -198,9 +196,10 @@ class FundItemState extends State<FundItem> {
     _cachedGszzl = widget.fund.gszzl;
     _cachedColor = _cachedGszzl < 0 ? Colors.green : Colors.red;
     _cachedGsz = widget.fund.gsz.toStringAsFixed(2);
-    _cachedBackdraw = widget.fund.backdraw_list.isNotEmpty
-        ? '${(widget.fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%'
-        : '0.00%';
+    _cachedBackdraw =
+        widget.fund.backdraw_list.isNotEmpty
+            ? '${(widget.fund.backdraw_list.last * 100.0).toStringAsFixed(2)}%'
+            : '0.00%';
   }
 
   Future<void> _updateBackTh(context, Fund fund) async {
@@ -246,13 +245,16 @@ class FundItemState extends State<FundItem> {
   @override
   Widget build(BuildContext context) {
     // 使用缓存值而不是每次都计算
-    final gszzlText = _cachedGszzl > 0
-        ? '+${_cachedGszzl.toStringAsFixed(2)}%'
-        : '${_cachedGszzl.toStringAsFixed(2)}%';
+    final gszzlText =
+        _cachedGszzl > 0
+            ? '+${_cachedGszzl.toStringAsFixed(2)}%'
+            : '${_cachedGszzl.toStringAsFixed(2)}%';
 
     Widget notifiy = const BadgeWid(times: 0);
     if (widget.fund.backdraw_list.last > widget.fund.back_th) {
-      notifiy = BadgeWid(times: widget.fund.backdraw_list.last / widget.fund.back_th);
+      notifiy = BadgeWid(
+        times: widget.fund.backdraw_list.last / widget.fund.back_th,
+      );
     }
 
     return Container(
@@ -284,18 +286,12 @@ class FundItemState extends State<FundItem> {
             width: 60,
             child: Text(
               gszzlText,
-              style: TextStyle(
-                color: _cachedColor,
-                fontSize: 15,
-              ),
+              style: TextStyle(color: _cachedColor, fontSize: 15),
             ),
           ),
           SizedBox(
             width: 60,
-            child: Text(
-              _cachedGsz,
-              style: TextStyle(fontSize: 15),
-            ),
+            child: Text(_cachedGsz, style: TextStyle(fontSize: 15)),
           ),
           SizedBox(
             width: 60,
@@ -307,9 +303,10 @@ class FundItemState extends State<FundItem> {
                         ? '-${_cachedBackdraw}'
                         : _cachedBackdraw,
                     style: TextStyle(
-                      color: widget.fund.backdraw_list.last > 0
-                          ? Colors.green
-                          : Colors.red,
+                      color:
+                          widget.fund.backdraw_list.last > 0
+                              ? Colors.green
+                              : Colors.red,
                       fontSize: 15,
                     ),
                   ),
@@ -357,12 +354,14 @@ class FundItemState extends State<FundItem> {
 
 class MyFundList extends StatefulWidget {
   final List<Fund> allFunds;
+  final FundDbHelper dbHelper;
   final Function(VoidCallback)? onRefreshCallbackSet; // 新增回调参数
 
   const MyFundList({
     super.key,
     required this.allFunds,
     this.onRefreshCallbackSet,
+    required this.dbHelper,
   });
 
   @override
@@ -392,7 +391,7 @@ class _MyFundListState extends State<MyFundList> {
   Future<void> loadMyFunds() async {
     // 检查组件是否仍然挂载
     if (!mounted) return;
-    
+
     setState(() => _loading = true);
 
     final prefs = await SharedPreferences.getInstance();
@@ -400,7 +399,7 @@ class _MyFundListState extends State<MyFundList> {
 
     // 检查组件是否仍然挂载
     if (!mounted) return;
-    
+
     setState(() {
       _myFundCodes = codes;
     });
@@ -409,10 +408,10 @@ class _MyFundListState extends State<MyFundList> {
       try {
         // 使用缓存优化基金数据加载
         final funds = await _loadFundsFromCacheOrNetwork(_myFundCodes);
-        
+
         // 检查组件是否仍然挂载
         if (!mounted) return;
-        
+
         setState(() {
           _myFunds = funds;
         });
@@ -426,7 +425,7 @@ class _MyFundListState extends State<MyFundList> {
     } else {
       // 检查组件是否仍然挂载
       if (!mounted) return;
-      
+
       setState(() {
         _myFunds = [];
       });
@@ -434,18 +433,18 @@ class _MyFundListState extends State<MyFundList> {
 
     // 检查组件是否仍然挂载
     if (!mounted) return;
-    
+
     setState(() => _loading = false);
   }
 
   // 优化基金数据加载，使用缓存机制
   Future<List<Fund>> _loadFundsFromCacheOrNetwork(List<String> codes) async {
     final List<Fund> funds = [];
-    
+
     // 并行加载基金基础信息
     final fundFutures = codes.map((code) => _loadFundBasicInfo(code)).toList();
     final basicFunds = await Future.wait(fundFutures);
-    
+
     // 为每个基金加载历史数据（如果需要）
     for (var fund in basicFunds) {
       if (fund != null) {
@@ -455,6 +454,11 @@ class _MyFundListState extends State<MyFundList> {
             fund.history = await fetchFundHistory(fund.fundcode, month: 1);
             fund.backdraw_list = calculateMaxDrawdown(fund.history);
             // 更新缓存
+            if (fund.gszzl == 0) {
+              fund.dwjz = fund.history.last.dwjz;
+              fund.gsz = fund.history.last.dwjz;
+              fund.gszzl = (fund.gsz - fund.dwjz) / fund.dwjz * 100;
+            }
             _fundCache[fund.fundcode] = fund;
           } catch (e) {
             // 如果加载失败，使用缓存数据
@@ -467,7 +471,7 @@ class _MyFundListState extends State<MyFundList> {
         funds.add(fund);
       }
     }
-    
+
     return funds;
   }
 
@@ -477,13 +481,13 @@ class _MyFundListState extends State<MyFundList> {
     if (!_fundCache.containsKey(fund.fundcode)) {
       return true;
     }
-    
+
     // 如果缓存中没有历史数据，则需要加载
     final cachedFund = _fundCache[fund.fundcode]!;
     if (cachedFund.history.isEmpty) {
       return true;
     }
-    
+
     // 简单策略：如果有缓存数据，则暂时不刷新（可根据需要调整）
     return false;
   }
@@ -494,15 +498,18 @@ class _MyFundListState extends State<MyFundList> {
     if (_fundCache.containsKey(fundCode)) {
       return _fundCache[fundCode];
     }
-    
+
     try {
       final fund = await findFund(fundCode);
-      _fundCache[fundCode] = fund;
       return fund;
     } catch (e) {
       // 如果网络加载失败，但有缓存数据，则使用缓存
       if (_fundCache.containsKey(fundCode)) {
         return _fundCache[fundCode];
+      }
+      final dbFund = await widget.dbHelper.findByCode(fundCode);
+      if (dbFund != null) {
+        return dbFund;
       }
       rethrow;
     }

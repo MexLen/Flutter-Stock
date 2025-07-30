@@ -89,10 +89,12 @@ def calculate_meituan_target_price(row):
 #     calculate_meituan_target_price(row)
 
 # ak.fund_portfolio_hold_em(symbol="161725")    
-ans = ak.fund_portfolio_hold_em(symbol="017867",date='2025')
-jd = ans['季度'].unique()
-sub =ans[ans['季度']==jd[1]]
+# ans = ak.fund_portfolio_hold_em(symbol="017867",date='2025')
+# jd = ans['季度'].unique()
+# sub =ans[ans['季度']==jd[1]]
 
 
-ans = ak.fund_open_fund_info_em(symbol="017867",period='3月',indicator='累计收益率走势')
-print(ans)
+# ans = ak.fund_open_fund_info_em(symbol="017867",period='3月',indicator='累计收益率走势')
+# print(ans)
+df_all = ak.fund_name_em()      # 约 2 w 条
+df_all.to_csv('fund.csv',index=False,columns=['基金代码','拼音缩写','基金简称','基金类型'])

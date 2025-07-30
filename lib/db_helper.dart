@@ -51,9 +51,9 @@ class FundDbHelper {
   Future<List<Map<String, dynamic>>> _loadData() async{
     List<Map<String,dynamic>> batch=[];
     final lines =
-        (await rootBundle.loadString('assets/raw/fund.txt')).split('\n');
+        (await rootBundle.loadString('assets/raw/fund.csv')).split('\n');
     for (var l in lines) {
-      final arr = l.trim().split('|');
+      final arr = l.trim().split(',');
       if (arr.length >= 4) {
         batch.add({
           'fundcode': arr[0],
